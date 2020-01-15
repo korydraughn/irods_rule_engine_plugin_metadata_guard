@@ -3,23 +3,88 @@
 #include <irods/irods_re_serialization.hpp>
 #include <irods/irods_re_ruleexistshelper.hpp>
 #include <irods/irods_get_full_path_for_config_file.hpp>
-#include <irods/filesystem.hpp>
+#include <irods/irods_at_scope_exit.hpp>
 #include <irods/irods_query.hpp>
 #include <irods/irods_logger.hpp>
 #include <irods/rodsError.h>
 #include <irods/rodsErrorTable.h>
 
 #include <json.hpp>
+
 #include <boost/any.hpp>
+#include <boost/algorithm/string/predicate.hpp>
+
+#include <string>
+#include <algorithm>
 
 namespace
 {
     // clang-format off
-    namespace fs = irods::experimental::filesystem;
-
-    using log    = irods::experimental::log;
-    using json   = nlohmann::json;
+    using log  = irods::experimental::log;
+    using json = nlohmann::json;
     // clang-format on
+
+    auto get_rei(irods::callback& _effect_handler) -> ruleExecInfo_t&
+    {
+        ruleExecInfo_t* rei{};
+        irods::error result{_effect_handler("unsafe_ms_ctx", &rei)};
+
+        if (!result.ok()) {
+            THROW(result.code(), "Failed to get rule execution info");
+        }
+
+        return *rei;
+    }
+
+    template <typename Function>
+    auto sudo(ruleExecInfo_t& _rei, Function _func) -> decltype(_func())
+    {
+        auto& auth_flag = _rei.rsComm->clientUser.authInfo.authFlag;
+        const auto old_auth_flag = auth_flag;
+
+        // Elevate privileges.
+        auth_flag = LOCAL_PRIV_USER_AUTH;
+
+        // Restore authorization flags on exit.
+        irods::at_scope_exit at_scope_exit{[&auth_flag, old_auth_flag] {
+            auth_flag = old_auth_flag;
+        }};
+
+        return _func();
+    }
+
+    auto load_plugin_config(ruleExecInfo_t& _rei) -> json
+    {
+        // Must elevate privileges so that the configuration can be retrieved.
+        // Users who aren't administrators cannot retrieve metadata they don't own.
+        return sudo(_rei, [&_rei] {
+            std::string json_string;
+
+            std::string gql = "select META_COLL_ATTR_VALUE "
+                              "where META_COLL_ATTR_NAME = 'irods::metadata_guard' and COLL_NAME = '/";
+            gql += _rei.rsComm->myEnv.rodsZone;
+            gql += "'";
+
+            for (auto&& row : irods::query{_rei.rsComm, gql}) {
+                json_string = row[0];
+            }
+
+            if (json_string.empty())
+            {
+                const char* msg = "Rule Engine Configuration not found";
+
+                // clang-format off
+                log::rule_engine::error({{"rule_engine_plugin", "metdata_guard"},
+                                         {"rule_engine_plugin_function", __func__},
+                                         {"log_message", msg}});
+                // clang-format on
+
+                THROW(SYS_CONFIG_FILE_ERR, msg);
+            }
+
+            return json::parse(json_string);
+        });
+    }
 
     //
     // Rule Engine Plugin
@@ -27,88 +92,6 @@ namespace
 
     template <typename ...Args>
     using operation = std::function<irods::error(irods::default_re_ctx&, Args...)>;
-
-    auto start(irods::default_re_ctx&, const std::string& _instance_name) -> irods::error
-    {
-        std::string config_path;
-
-        if (auto error = irods::get_full_path_for_config_file("server_config.json", config_path);
-            !error.ok())
-        {
-            const char* msg = "Server configuration not found";
-
-            // clang-format off
-            log::rule_engine::error({{"rule_engine_plugin", "metdata_guard"},
-                                     {"rule_engine_plugin_function", __func__},
-                                     {"log_message", msg}});
-            // clang-format on
-
-            return ERROR(SYS_CONFIG_FILE_ERR, msg);
-        }
-
-        // clang-format off
-        log::rule_engine::trace({{"rule_engine_plugin", "metdata_guard"},
-                                 {"rule_engine_plugin_function", __func__},
-                                 {"log_message", "Reading plugin configuration ..."}});
-        // clang-format on
-
-        json config;
-
-        {
-            std::ifstream config_file{config_path};
-            config_file >> config;
-        }
-
-        try {
-            const auto get_prop = [](const json& _config, auto&& _name) -> std::string
-            {
-                try {
-                    return _config.at(_name).template get<std::string>();
-                }
-                catch (...) {
-                    throw std::runtime_error{fmt::format("Logical Quotas Policy: Failed to find rule engine "
-                                                         "plugin configuration property [{}]", _name)};
-                }
-            };
-
-            for (const auto& re : config.at(irods::CFG_PLUGIN_CONFIGURATION_KW).at(irods::PLUGIN_TYPE_RULE_ENGINE)) {
-                if (_instance_name == re.at(irods::CFG_INSTANCE_NAME_KW).get<std::string>()) {
-                    const auto& plugin_config = re.at(irods::CFG_PLUGIN_SPECIFIC_CONFIGURATION_KW);
-
-                    const auto& attr_names = [&plugin_config] {
-                        try {
-                            return plugin_config.at("metadata_attribute_names");
-                        }
-                        catch (...) {
-                            throw std::runtime_error{fmt::format("Logical Quotas Policy: Failed to find rule engine "
-                                                                 "plugin configuration property [metadata_attribute_name]")};
-                        }
-                    }();
-
-                    irods::instance_configuration instance_config{{get_prop(plugin_config, "namespace"),
-                                                                   get_prop(attr_names, "maximum_number_of_data_objects"),
-                                                                   get_prop(attr_names, "maximum_size_in_bytes"),
-                                                                   get_prop(attr_names, "total_number_of_data_objects"),
-                                                                   get_prop(attr_names, "total_size_in_bytes")}};
-
-                    instance_configs.insert_or_assign(_instance_name, instance_config);
-
-                    return SUCCESS();
-                }
-            }
-        }
-        catch (const std::exception& e) {
-            // clang-format off
-            log::rule_engine::error({{"rule_engine_plugin", "metdata_guard"},
-                                     {"rule_engine_plugin_function", __func__},
-                                     {"log_message", "Bad rule engine plugin configuration"}});
-            // clang-format on
-
-            return ERROR(SYS_CONFIG_FILE_ERR, e.what());
-        }
-
-        return ERROR(SYS_CONFIG_FILE_ERR, "[metdata_guard] Bad rule engine plugin configuration");
-    }
 
     auto rule_exists(irods::default_re_ctx&, const std::string& _rule_name, bool& _exists) -> irods::error
     {
@@ -127,7 +110,53 @@ namespace
                    std::list<boost::any>& _rule_arguments,
                    irods::callback _effect_handler) -> irods::error
     {
-        //log::rule_engine::error("Rule not supported in rule engine plugin [rule => {}]", _rule_name);
+        try {
+            auto* input = boost::any_cast<modAVUMetadataInp_t*>(*std::next(std::begin(_rule_arguments), 2));
+            auto& rei = get_rei(_effect_handler);
+
+            const auto user_is_administrator = [auth_flag = rei.rsComm->clientUser.authInfo.authFlag]() noexcept
+            {
+                return auth_flag >= LOCAL_PRIV_USER_AUTH;
+            };
+
+            const auto is_modification = [op = std::string_view{input->arg0}]() noexcept
+            {
+                static const auto ops = {"set", "mod", "rm", "rmw", "rmi"};
+                return std::any_of(std::begin(ops), std::end(ops), [&op](auto&& mod_op) {
+                    return op == mod_op;
+                });
+            };
+
+            if (!user_is_administrator() && is_modification()) {
+                const auto config = load_plugin_config(rei);
+
+                // JSON Configuration structure:
+                // {
+                //   "prefixes": ["irods::"],
+                //   "editors": ["rodsadmin"]
+                // }
+
+                for (auto&& prefix : config.at("prefixes")) {
+                    if (boost::starts_with(input->arg3, prefix.get<std::string>())) {
+                        log::rule_engine::error("User must be an administrator to modify metadata [attribute => " +
+                                                std::string{input->arg3} + ']');
+                        return ERROR(CAT_INSUFFICIENT_PRIVILEGE_LEVEL, "User must be an administrator to modify metadata");
+                    }
+                }
+            }
+        }
+        catch (const json::parse_error& e) {
+            log::rule_engine::error("JSON parse error: " + std::string{e.what()});
+            return ERROR(RULE_ENGINE_ERROR, e.what());
+        }
+        catch (const json::type_error& e) {
+            log::rule_engine::error("JSON access error: " + std::string{e.what()});
+            return ERROR(RULE_ENGINE_ERROR, e.what());
+        }
+        catch (const std::exception& e) {
+            log::rule_engine::error(e.what());
+            return ERROR(RULE_ENGINE_ERROR, e.what());
+        }
 
         return CODE(RULE_ENGINE_CONTINUE);
     }
@@ -149,7 +178,7 @@ auto plugin_factory(const std::string& _instance_name, const std::string& _conte
 
     auto* re = new pluggable_rule_engine{_instance_name, _context};
 
-    re->add_operation("start", operation<const std::string&>{start});
+    re->add_operation("start", operation<const std::string&>{no_op});
     re->add_operation("stop", operation<const std::string&>{no_op});
     re->add_operation("rule_exists", operation<const std::string&, bool&>{rule_exists});
     re->add_operation("list_rules", operation<std::vector<std::string>&>{list_rules});

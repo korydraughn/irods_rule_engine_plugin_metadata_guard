@@ -48,14 +48,15 @@ target_compile_options(${PLUGIN} PRIVATE -Wno-write-strings -nostdinc++)
 target_compile_definitions(${PLUGIN} PRIVATE ${IRODS_COMPILE_DEFINITIONS}
                                              RODS_SERVER
                                              IRODS_ENABLE_SYSLOG
-                                             IRODS_FILESYSTEM_ENABLE_SERVER_SIDE_API
-                                             IRODS_IO_TRANSPORT_ENABLE_SERVER_SIDE_API
-                                             FMT_HEADER_ONLY
-                                             SPDLOG_FMT_EXTERNAL)
+                                             IRODS_FILESYSTEM_ENABLE_SERVER_SIDE_API)
+                                             #IRODS_IO_TRANSPORT_ENABLE_SERVER_SIDE_API
+                                             #FMT_HEADER_ONLY
+                                             #SPDLOG_FMT_EXTERNAL)
 
 target_include_directories(${PLUGIN} PRIVATE ${IRODS_INCLUDE_DIRS}
                                              ${IRODS_EXTERNALS_FULLPATH_CLANG}/include/c++/v1
                                              ${IRODS_EXTERNALS_FULLPATH_BOOST}/include
+                                             ${IRODS_EXTERNALS_FULLPATH_SPDLOG}/include
                                              ${IRODS_EXTERNALS_FULLPATH_JSON}/include)
 
 target_link_libraries(${PLUGIN} PRIVATE irods_server
