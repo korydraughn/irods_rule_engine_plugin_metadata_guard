@@ -39,7 +39,8 @@ set(PLUGIN_VERSION_MINOR 0)
 set(PLUGIN_VERSION_PATCH 0)
 set(PLUGIN_VERSION "${PLUGIN_VERSION_MAJOR}.${PLUGIN_VERSION_MINOR}.${PLUGIN_VERSION_PATCH}")
 
-add_library(${PLUGIN} MODULE ${CMAKE_SOURCE_DIR}/src/main.cpp)
+add_library(${PLUGIN} MODULE ${CMAKE_SOURCE_DIR}/src/main.cpp
+                             ${CMAKE_SOURCE_DIR}/src/user_administration.cpp)
 
 set_target_properties(${PLUGIN} PROPERTIES CXX_STANDARD ${IRODS_CXX_STANDARD})
 
@@ -48,7 +49,8 @@ target_compile_options(${PLUGIN} PRIVATE -Wno-write-strings -nostdinc++)
 target_compile_definitions(${PLUGIN} PRIVATE ${IRODS_COMPILE_DEFINITIONS}
                                              RODS_SERVER
                                              IRODS_ENABLE_SYSLOG
-                                             IRODS_FILESYSTEM_ENABLE_SERVER_SIDE_API)
+                                             IRODS_FILESYSTEM_ENABLE_SERVER_SIDE_API
+                                             IRODS_USER_ADMINISTRATION_ENABLE_SERVER_SIDE_API)
                                              #IRODS_IO_TRANSPORT_ENABLE_SERVER_SIDE_API
                                              #FMT_HEADER_ONLY
                                              #SPDLOG_FMT_EXTERNAL)

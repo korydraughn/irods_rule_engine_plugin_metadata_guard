@@ -1,3 +1,5 @@
+#include "user_administration.hpp"
+
 #include <irods/irods_plugin_context.hpp>
 #include <irods/irods_re_plugin.hpp>
 #include <irods/irods_re_serialization.hpp>
@@ -6,6 +8,8 @@
 #include <irods/irods_at_scope_exit.hpp>
 #include <irods/irods_query.hpp>
 #include <irods/irods_logger.hpp>
+#include <irods/irods_rs_comm_query.hpp>
+#include <irods/irods_state_table.h>
 #include <irods/rodsError.h>
 #include <irods/rodsErrorTable.h>
 
@@ -16,6 +20,7 @@
 
 #include <string>
 #include <algorithm>
+#include <array>
 
 namespace
 {
@@ -86,6 +91,17 @@ namespace
         });
     }
 
+    auto user_is_administrator(const rsComm_t& conn) -> irods::error
+    {
+        if (irods::is_privileged_client(conn)) {
+            return CODE(RULE_ENGINE_CONTINUE);
+        }
+
+        log::rule_engine::error("User must be an administrator to modify metadata");
+
+        return ERROR(CAT_INSUFFICIENT_PRIVILEGE_LEVEL, "User must be an admininstrator to modify metadata");
+    }
+
     //
     // Rule Engine Plugin
     //
@@ -114,11 +130,6 @@ namespace
             auto* input = boost::any_cast<modAVUMetadataInp_t*>(*std::next(std::begin(_rule_arguments), 2));
             auto& rei = get_rei(_effect_handler);
 
-            const auto user_is_administrator = [auth_flag = rei.rsComm->clientUser.authInfo.authFlag]() noexcept
-            {
-                return auth_flag >= LOCAL_PRIV_USER_AUTH;
-            };
-
             const auto is_modification = [op = std::string_view{input->arg0}]() noexcept
             {
                 static const auto ops = {"set", "mod", "rm", "rmw", "rmi"};
@@ -127,23 +138,59 @@ namespace
                 });
             };
 
-            if (!user_is_administrator() && is_modification()) {
-                const auto config = load_plugin_config(rei);
+            if (!is_modification()) {
+                return CODE(RULE_ENGINE_CONTINUE);
+            }
 
-                // JSON Configuration structure:
-                // {
-                //   "prefixes": ["irods::"],
-                //   "editors": ["rodsadmin"]
-                // }
+            const auto config = load_plugin_config(rei);
 
-                for (auto&& prefix : config.at("prefixes")) {
-                    if (boost::starts_with(input->arg3, prefix.get<std::string>())) {
-                        log::rule_engine::error("User must be an administrator to modify metadata [attribute => " +
-                                                std::string{input->arg3} + ']');
-                        return ERROR(CAT_INSUFFICIENT_PRIVILEGE_LEVEL, "User must be an administrator to modify metadata");
+            // JSON Configuration structure:
+            // {
+            //   "admin_only": true,
+            //   "prefixes": ["irods::"],
+            //   "editors": [
+            //     {"type": "group", "name": "rodsadmin"},
+            //     {"type": "user",  "name": "kory"},
+            //     {"type": "user",  "name": "jane#otherZone"}
+            //   ]
+            // }
+
+            // The "admin_only" flag supersedes all other configuration options pertaining to
+            // allowing/denying permission to modify metadata.
+            if (config.count("admin_only") && config["admin_only"].get<bool>()) {
+                return user_is_administrator(*rei.rsComm);
+            }
+
+            for (auto&& prefix : config.at("prefixes")) {
+                // If the metadata attribute starts with the prefix, then verify that the user
+                // can modify the metadata attribute.
+                if (boost::starts_with(input->arg3, prefix.get<std::string>())) {
+                    namespace ua = irods::experimental::administration;
+
+                    const ua::user user{rei.uoic->userName, rei.uoic->rodsZone};
+
+                    for (auto&& editor : config.at("editors")) {
+                        if (const auto type = editor.at("type").get<std::string>(); type == "group") {
+                            const ua::group group{editor.at("name").get<std::string>()};
+
+                            if (ua::server::user_is_member_of_group(*rei.rsComm, group, user)) {
+                                return CODE(RULE_ENGINE_CONTINUE);
+                            }
+                        }
+                        else if (type == "user") {
+                            if (editor.at("name").get<std::string>() == ua::server::unique_name(*rei.rsComm, user)) {
+                                return CODE(RULE_ENGINE_CONTINUE);
+                            }
+                        }
                     }
+
+                    break;
                 }
             }
+
+            log::rule_engine::error("User is not allowed to modify metadata [attribute => " + std::string{input->arg3} + ']');
+
+            return ERROR(CAT_INSUFFICIENT_PRIVILEGE_LEVEL, "User is not allowed to modify metadata");
         }
         catch (const json::parse_error& e) {
             log::rule_engine::error("JSON parse error: " + std::string{e.what()});
