@@ -22,20 +22,6 @@
 
 using json = nlohmann::json;
 
-namespace irods::experimental::administration
-{
-    user::user(std::string name, std::optional<std::string> zone)
-        : name{std::move(name)}
-        , zone{zone ? *zone : ""}
-    {
-    }
-
-    group::group(std::string name)
-        : name{std::move(name)}
-    {
-    }
-}
-
 namespace irods::experimental::administration::NAMESPACE_IMPL
 {
     namespace
@@ -92,7 +78,7 @@ namespace irods::experimental::administration::NAMESPACE_IMPL
             std::strncpy(plain_text_password.data(), new_password.data(), MAX_PASSWORD_LEN);
 
             if (const auto lcopy = MAX_PASSWORD_LEN - 10 - new_password.size(); lcopy > 15) {
-                // The random string (second argument) is used to pad and must match the 
+                // The random string (second argument) is used for padding and must match 
                 // what is defined on the server-side.
                 std::strncat(plain_text_password.data(), "1gCBizHWbwIYyWLoysGzTe6SyzqFKMniZX05faZHWAwQKXf6Fs", lcopy);
             }
@@ -117,7 +103,7 @@ namespace irods::experimental::administration::NAMESPACE_IMPL
                    user_type user_type,
                    zone_type zone_type) -> std::error_code
     {
-        std::string name = unique_name(conn, user);
+        std::string name = local_unique_name(conn, user);
         std::string zone;
 
         if (zone_type::local == zone_type) {
@@ -140,7 +126,7 @@ namespace irods::experimental::administration::NAMESPACE_IMPL
 
     auto remove_user(rxComm& conn, const user& user) -> std::error_code
     {
-        const auto name = unique_name(conn, user);
+        const auto name = local_unique_name(conn, user);
 
         generalAdminInp_t input{};
         input.arg0 = "rm";
@@ -175,7 +161,7 @@ namespace irods::experimental::administration::NAMESPACE_IMPL
 
     auto set_user_type(rxComm& conn, const user& user, user_type new_user_type) -> std::error_code
     {
-        const auto name = unique_name(conn, user);
+        const auto name = local_unique_name(conn, user);
 
         generalAdminInp_t input{};
         input.arg0 = "modify";
@@ -193,7 +179,7 @@ namespace irods::experimental::administration::NAMESPACE_IMPL
 
     auto add_user_auth(rxComm& conn, const user& user, std::string_view auth) -> std::error_code
     {
-        const auto name = unique_name(conn, user);
+        const auto name = local_unique_name(conn, user);
 
         generalAdminInp_t input{};
         input.arg0 = "modify";
@@ -211,7 +197,7 @@ namespace irods::experimental::administration::NAMESPACE_IMPL
 
     auto remove_user_auth(rxComm& conn, const user& user, std::string_view auth) -> std::error_code
     {
-        const auto name = unique_name(conn, user);
+        const auto name = local_unique_name(conn, user);
 
         generalAdminInp_t input{};
         input.arg0 = "modify";
@@ -333,6 +319,7 @@ namespace irods::experimental::administration::NAMESPACE_IMPL
 
         // Some groups will not show up because of the condition.
         // (e.g. "public" will not show up via this query).
+        // FIXME "public" should be identified as a "rodsgroup".
         for (auto&& row : irods::query{&conn, "select USER_GROUP_NAME where USER_TYPE = 'rodsgroup'"}) {
             groups.emplace_back(row[0]);
         }
@@ -345,7 +332,7 @@ namespace irods::experimental::administration::NAMESPACE_IMPL
         std::vector<group> groups;
 
         std::string gql = "select USER_GROUP_NAME where USER_TYPE = 'rodsgroup' and USER_NAME = '";
-        gql += unique_name(conn, user);
+        gql += local_unique_name(conn, user);
         gql += "' and USER_ZONE = '";
         gql += (user.zone.empty() ? get_local_zone(conn) : user.zone);
         gql += "'";
@@ -360,7 +347,7 @@ namespace irods::experimental::administration::NAMESPACE_IMPL
     auto exists(rxComm& conn, const user& user) -> bool
     {
         std::string gql = "select USER_ID where USER_TYPE != 'rodsgroup' and USER_NAME = '";
-        gql += unique_name(conn, user);
+        gql += user.name;
         gql += "' and USER_ZONE = '";
         gql += (user.zone.empty() ? get_local_zone(conn) : user.zone);
         gql += "'";
@@ -390,7 +377,7 @@ namespace irods::experimental::administration::NAMESPACE_IMPL
     auto id(rxComm& conn, const user& user) -> std::optional<std::string>
     {
         std::string gql = "select USER_ID where USER_TYPE != 'rodsgroup' and USER_NAME = '";
-        gql += unique_name(conn, user);
+        gql += local_unique_name(conn, user);
         gql += "' and USER_ZONE = '";
         gql += (user.zone.empty() ? get_local_zone(conn) : user.zone);
         gql += "'";
@@ -418,7 +405,7 @@ namespace irods::experimental::administration::NAMESPACE_IMPL
     auto type(rxComm& conn, const user& user) -> std::optional<user_type>
     {
         std::string gql = "select USER_TYPE where USER_TYPE != 'rodsgroup' and USER_NAME = '";
-        gql += unique_name(conn, user);
+        gql += local_unique_name(conn, user);
         gql += "' and USER_ZONE = '";
         gql += (user.zone.empty() ? get_local_zone(conn) : user.zone);
         gql += "'";
@@ -435,7 +422,7 @@ namespace irods::experimental::administration::NAMESPACE_IMPL
         std::vector<std::string> auth_names;
 
         std::string gql = "select USER_DN where USER_TYPE != 'rodsgroup' and USER_NAME = '";
-        gql += unique_name(conn, user);
+        gql += local_unique_name(conn, user);
         gql += "' and USER_ZONE = '";
         gql += (user.zone.empty() ? get_local_zone(conn) : user.zone);
         gql += "'";
@@ -447,11 +434,10 @@ namespace irods::experimental::administration::NAMESPACE_IMPL
         return auth_names;
     }
 
-
     auto user_is_member_of_group(rxComm& conn, const group& group, const user& user) -> bool
     {
         std::string gql = "select USER_ID where USER_TYPE != 'rodsgroup' and USER_NAME = '";
-        gql += unique_name(conn, user);
+        gql += local_unique_name(conn, user);
         gql += "' and USER_ZONE = '";
         gql += (user.zone.empty() ? get_local_zone(conn) : user.zone);
         gql += "' and USER_GROUP_NAME = '";
@@ -468,8 +454,14 @@ namespace irods::experimental::administration::NAMESPACE_IMPL
 
     // Utility
 
-    auto unique_name(rxComm& conn, const user& user) -> std::string
+    auto local_unique_name(rxComm& conn, const user& user) -> std::string
     {
+        // Implies that the user belongs to the local zone and
+        // is not a remote user (i.e. federation).
+        if (user.zone.empty()) {
+            return user.name;
+        }
+
         auto name = user.name;
 
         if (user.zone != get_local_zone(conn)) {

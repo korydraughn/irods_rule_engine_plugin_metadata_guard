@@ -47,17 +47,24 @@ namespace irods::experimental::administration
 
     struct user
     {
-        explicit user(std::string name, std::optional<std::string> zone = std::nullopt);
+        explicit user(std::string name, std::optional<std::string> zone = std::nullopt)
+            : name{std::move(name)}
+            , zone{zone ? *zone : ""}
+        {
+        }
 
-        const std::string name;
-        const std::string zone;
+        std::string name;
+        std::string zone;
     }; // user
 
     struct group
     {
-        explicit group(std::string name);
+        explicit group(std::string name)
+            : name{std::move(name)}
+        {
+        }
 
-        const std::string name;
+        std::string name;
     }; // group
 
     // Exceptions
@@ -105,7 +112,7 @@ namespace irods::experimental::administration::NAMESPACE_IMPL
     auto users(rxComm& conn, const group& group) -> std::vector<user>;
 
     auto groups(rxComm& conn) -> std::vector<group>;
-    auto groups(rxComm& conn, const user& user) -> std::vector<group>;
+    auto groups(rxComm& conn, const user& user) -> std::vector<group>; // FIXME Doesn't work! Bad query.
 
     auto exists(rxComm& conn, const user& user) -> bool;
     auto exists(rxComm& conn, const group& group) -> bool;
@@ -120,7 +127,7 @@ namespace irods::experimental::administration::NAMESPACE_IMPL
 
     // Utility
 
-    auto unique_name(rxComm& conn, const user& user) -> std::string;
+    auto local_unique_name(rxComm& conn, const user& user) -> std::string;
 
     auto operator<<(std::ostream& out, const user& user) -> std::ostream&;
     auto operator<<(std::ostream& out, const group& group) -> std::ostream&;

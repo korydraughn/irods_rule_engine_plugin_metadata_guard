@@ -97,7 +97,10 @@ namespace
             return CODE(RULE_ENGINE_CONTINUE);
         }
 
-        log::rule_engine::error("User must be an administrator to modify metadata");
+        // clang-format off
+        log::rule_engine::error({{"log_message", "User is not allowed to modify metadata."},
+                                 {"rule_engine_plugin", "metadata_guard"}});
+        // clang-format on
 
         return ERROR(CAT_INSUFFICIENT_PRIVILEGE_LEVEL, "User must be an admininstrator to modify metadata");
     }
@@ -155,8 +158,8 @@ namespace
             //   ]
             // }
 
-            // The "admin_only" flag supersedes all other configuration options pertaining to
-            // allowing/denying permission to modify metadata.
+            // The "admin_only" flag supersedes all other configuration options.
+            // If this flag is true, all other configuration options will be ignored.
             if (config.count("admin_only") && config["admin_only"].get<bool>()) {
                 return user_is_administrator(*rei.rsComm);
             }
@@ -178,7 +181,7 @@ namespace
                             }
                         }
                         else if (type == "user") {
-                            if (editor.at("name").get<std::string>() == ua::server::unique_name(*rei.rsComm, user)) {
+                            if (editor.at("name").get<std::string>() == ua::server::local_unique_name(*rei.rsComm, user)) {
                                 return CODE(RULE_ENGINE_CONTINUE);
                             }
                         }
@@ -188,21 +191,30 @@ namespace
                 }
             }
 
-            log::rule_engine::error("User is not allowed to modify metadata [attribute => " + std::string{input->arg3} + ']');
+            // clang-format off
+            log::rule_engine::error({{"log_message", "User is not allowed to modify metadata [attribute => " + std::string{input->arg3} + ']'},
+                                     {"rule_engine_plugin", "metadata_guard"}});
+            // clang-format on
 
             return ERROR(CAT_INSUFFICIENT_PRIVILEGE_LEVEL, "User is not allowed to modify metadata");
         }
         catch (const json::parse_error& e) {
-            log::rule_engine::error("JSON parse error: " + std::string{e.what()});
-            return ERROR(RULE_ENGINE_ERROR, e.what());
+            // clang-format off
+            log::rule_engine::error({{"log_message", "Cannot parse Rule Engine Plugin configuration."},
+                                     {"rule_engine_plugin", "metadata_guard"}});
+            // clang-format on
         }
         catch (const json::type_error& e) {
-            log::rule_engine::error("JSON access error: " + std::string{e.what()});
-            return ERROR(RULE_ENGINE_ERROR, e.what());
+            // clang-format off
+            log::rule_engine::error({{"log_message", "Missing or incorrect configuration properties."},
+                                     {"rule_engine_plugin", "metadata_guard"}});
+            // clang-format on
         }
         catch (const std::exception& e) {
-            log::rule_engine::error(e.what());
-            return ERROR(RULE_ENGINE_ERROR, e.what());
+            // clang-format off
+            log::rule_engine::error({{"log_message", e.what()},
+                                     {"rule_engine_plugin", "metadata_guard"}});
+            // clang-format on
         }
 
         return CODE(RULE_ENGINE_CONTINUE);
