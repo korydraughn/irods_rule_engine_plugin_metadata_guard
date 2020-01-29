@@ -112,7 +112,7 @@ namespace irods::experimental::administration::NAMESPACE_IMPL
     auto users(rxComm& conn, const group& group) -> std::vector<user>;
 
     auto groups(rxComm& conn) -> std::vector<group>;
-    auto groups(rxComm& conn, const user& user) -> std::vector<group>; // FIXME Doesn't work! Bad query.
+    auto groups(rxComm& conn, const user& user) -> std::vector<group>;
 
     auto exists(rxComm& conn, const user& user) -> bool;
     auto exists(rxComm& conn, const group& group) -> bool;

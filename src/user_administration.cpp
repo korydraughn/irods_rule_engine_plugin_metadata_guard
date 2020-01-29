@@ -14,6 +14,7 @@
 #include "obf.h"
 #include "authenticate.h"
 #include "irods_query.hpp"
+#include "query_builder.hpp"
 
 #include "json.hpp"
 
@@ -317,9 +318,6 @@ namespace irods::experimental::administration::NAMESPACE_IMPL
     {
         std::vector<group> groups;
 
-        // Some groups will not show up because of the condition.
-        // (e.g. "public" will not show up via this query).
-        // FIXME "public" should be identified as a "rodsgroup".
         for (auto&& row : irods::query{&conn, "select USER_GROUP_NAME where USER_TYPE = 'rodsgroup'"}) {
             groups.emplace_back(row[0]);
         }
@@ -329,15 +327,17 @@ namespace irods::experimental::administration::NAMESPACE_IMPL
 
     auto groups(rxComm& conn, const user& user) -> std::vector<group>
     {
+        std::vector<std::string> args{local_unique_name(conn, user)};
+
+        query_builder qb;
+        
+        qb.type(query_type::specific)
+          .zone_hint(user.zone.empty() ? get_local_zone(conn) : user.zone)
+          .bind_arguments(args);
+
         std::vector<group> groups;
 
-        std::string gql = "select USER_GROUP_NAME where USER_TYPE = 'rodsgroup' and USER_NAME = '";
-        gql += local_unique_name(conn, user);
-        gql += "' and USER_ZONE = '";
-        gql += (user.zone.empty() ? get_local_zone(conn) : user.zone);
-        gql += "'";
-
-        for (auto&& row : irods::query{&conn, gql}) {
+        for (auto&& row : qb.build(conn, "listGroupsForUser")) {
             groups.emplace_back(row[0]);
         }
 
