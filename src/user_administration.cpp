@@ -337,8 +337,20 @@ namespace irods::experimental::administration::NAMESPACE_IMPL
 
         std::vector<group> groups;
 
-        for (auto&& row : qb.build(conn, "listGroupsForUser")) {
-            groups.emplace_back(row[0]);
+        try {
+            for (auto&& row : qb.build(conn, "listGroupsForUser")) {
+                groups.emplace_back(row[0]);
+            }
+        }
+        catch (...) {
+            // GenQuery fallback.
+            groups.clear();
+
+            for (auto&& g : NAMESPACE_IMPL::groups(conn)) {
+                if (user_is_member_of_group(conn, g, user)) {
+                    groups.push_back(std::move(g));
+                }
+            }
         }
 
         return groups;
