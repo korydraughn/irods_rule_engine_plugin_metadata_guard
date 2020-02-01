@@ -76,7 +76,7 @@ namespace
 
             if (json_string.empty())
             {
-                const char* msg = "Rule Engine Configuration not found";
+                const char* msg = "Rule Engine Plugin Configuration not set as metadata";
 
                 // clang-format off
                 log::rule_engine::error({{"rule_engine_plugin", "metdata_guard"},
@@ -160,7 +160,7 @@ namespace
 
             // The "admin_only" flag supersedes all other configuration options.
             // If this flag is true, all other configuration options will be ignored.
-            if (config.count("admin_only") && config["admin_only"].get<bool>()) {
+            if (config.count("admin_only") && config.at("admin_only").get<bool>()) {
                 return user_is_administrator(*rei.rsComm);
             }
 
