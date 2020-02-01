@@ -42,7 +42,7 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
 
             # Set invalid JSON configuration for the root collection.
             root_coll = os.path.join('/', self.admin.zone_name)
-            json_config = 'bad JSON config'
+            json_config = '{bad JSON config}'
             self.admin.assert_icommand(['imeta', 'set', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
 
             # This should cause an exception to be thrown and logged, but users
@@ -51,7 +51,7 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
             start_index = lib.get_file_size_by_path(paths.server_log_path())
             self.admin.assert_icommand(['ils'], 'STDOUT', [self.admin.local_session_dir])
             count = lib.count_occurrences_of_string_in_log(paths.server_log_path(), 'Cannot parse Rule Engine Plugin configuration', start_index)
-            self.assertEqual(count, 1)
+            self.assertTrue(count == 1)
 
             # Clean up.
             self.admin.assert_icommand(['imeta', 'rm', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
@@ -73,11 +73,13 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
                 ]
             })
             self.admin.assert_icommand(['imeta', 'set', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
-            self.admin.assert_icommand(['imeta', 'set', '-C', self.admin.local_session_dir, 'irods::guarded_attr', 'abc'])
+
+            attribute_name = 'irods::guarded_attribute'
+            self.admin.assert_icommand(['imeta', 'set', '-C', self.admin.local_session_dir, attribute_name, 'abc'])
 
             # Give write permission to less privileged user.
             self.admin.assert_icommand(['ichmod', 'write', 'otheralice', self.admin.local_session_dir])
-            self.user.assert_icommand(['imeta', 'set', '-C', self.admin.local_session_dir, 'irods::guarded_attr', 'DEF'])
+            self.user.assert_icommand(['imeta', 'set', '-C', self.admin.local_session_dir, attribute_name, 'DEF'])
 
             # Clean up.
             self.admin.assert_icommand(['imeta', 'rm', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
@@ -98,12 +100,14 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
                 ]
             })
             self.admin.assert_icommand(['imeta', 'set', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
-            self.admin.assert_icommand(['imeta', 'set', '-C', self.admin.local_session_dir, 'irods::guarded_attr', 'abc'])
+
+            attribute_name = 'irods::guarded_attribute'
+            self.admin.assert_icommand(['imeta', 'set', '-C', self.admin.local_session_dir, attribute_name, 'abc'])
 
             # Give write permission to less privileged user.
             self.admin.assert_icommand(['ichmod', 'write', 'otheralice', self.admin.local_session_dir])
-            self.user.assert_icommand(['imeta', 'set', '-C', self.admin.local_session_dir, 'irods::guarded_attr', 'DEF'],
-                                      'STDERR', ['CAT_INSUFFICIENT_PRIVILEGE_LEVEL'])
+            self.user.assert_icommand(['imeta', 'set', '-C', self.admin.local_session_dir, attribute_name, 'DEF'],
+                                       'STDERR', ['CAT_INSUFFICIENT_PRIVILEGE_LEVEL'])
 
             # Clean up.
             self.admin.assert_icommand(['imeta', 'rm', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
