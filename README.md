@@ -36,21 +36,50 @@ should be similar to the following:
 ```
 
 ## Configuration
-Enabling this rule engine plugin requires two steps:
-1. Use `imeta` to set the necessary JSON configuration on the root collection (e.g. /tempZone).
-2. Add the rule engine plugin to `server_config.json`.
+The Rule Engine Plugin's (REP) configuration is set as metadata on the zone collection (e.g. /tempZone) and
+each option is explained below.
+```javascript
+{
+    // Only allows administrators to modify metadata.
+    // This option supersedes all other options.
+    "admin_only": true,
 
-### Step 1 - JSON Configuration
-Set JSON configuration on the root collection (e.g. /tempZone). Any time a request to modify metadata is detected
-by the server, the rule engine plugin will read this JSON configuration and determine whether the user should be
-allowed to continue.
-```bash
-$ imeta set -C /<zone_name> irods::metadata_guard '{"admin_only": true}'
+    // The options that follow are only considered if "admin_only" does not exist
+    // or it is set to false.
+
+    // The list of strings that represent metadata that should be guarded.
+    // In this example, any metadata beginning with "irods::" will be treated special
+    // and require that the user be classified as an editor.
+    "prefixes": ["irods::"],
+
+    // The list of editors that can modify guarded metadata.
+    "editors": [
+        {
+            // The type of entity that is allowed to modify metadata.
+            // The following options are available:
+            // - "user"
+            // - "group"
+            "type": "group",
+
+            // The name of the iRODS entity.
+            // For remote users, you must include the zone (e.g. "rods#tempZone").
+            "name": "rodsadmin"
+        }
+    ]
+}
 ```
+Once you've decided on what your configuration will be, you'll need to use `imeta` to set it. For example:
+```bash
+$ imeta set -C /tempZone irods::metadata_guard '{"admin_only": true}'
+```
+Anytime a request to modify metadata is detected by the server, the rule engine plugin will read the JSON
+configuration and determine whether the user should be allowed to continue.
 
-### Step 2 - server_config.json
+**NOTE: Remember, the user setting the metadata on the zone collection must have write permission on that collection!**
+
+## Enabling the Rule Engine Plugin
 To enable, prepend the following plugin config to the list of rule engines in `/etc/irods/server_config.json`. 
-The plugin config should be placed near the beginning of the `"rule_engines"` section.
+The plugin config should be placed before any rule engines that need metadata to be guarded.
 
 Even though this plugin will process PEPs first due to it's positioning, subsequent Rule Engine Plugins (REP) will 
 still be allowed to process the same PEPs without any issues.
@@ -66,5 +95,4 @@ still be allowed to process the same PEPs without any issues.
 ]
 
 ```
-## Usage
 
