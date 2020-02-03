@@ -36,11 +36,11 @@ should be similar to the following:
 ```
 
 ## Configuration
-The Rule Engine Plugin's (REP) configuration is set as metadata on the zone collection (e.g. /tempZone) and
-each option is explained below.
+The Rule Engine Plugin (REP) config is set as metadata on the zone collection (e.g. `/tempZone`).
+Each option is explained below.
 ```javascript
 {
-    // Only allows administrators to modify metadata.
+    // Only administrators are allowed to modify metadata.
     // This option supersedes all other options.
     "admin_only": true,
 
@@ -68,14 +68,14 @@ each option is explained below.
     ]
 }
 ```
-Once you've decided on what your configuration will be, you'll need to use `imeta` to set it. For example:
+Once you've decided on what your config will be, you'll need to use `imeta` to set it. For example:
 ```bash
 $ imeta set -C /tempZone irods::metadata_guard '{"admin_only": true}'
 ```
 Anytime a request to modify metadata is detected by the server, the rule engine plugin will read the JSON
-configuration and determine whether the user should be allowed to continue.
+config and determine whether the user should be allowed to continue.
 
-**NOTE: Remember, the user setting the metadata on the zone collection must have write permission on that collection!**
+**NOTE: The user setting the metadata on the zone collection must have write permission on that collection!**
 
 ## Enabling the Rule Engine Plugin
 To enable, prepend the following plugin config to the list of rule engines in `/etc/irods/server_config.json`. 
