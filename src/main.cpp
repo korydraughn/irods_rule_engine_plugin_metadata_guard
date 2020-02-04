@@ -74,8 +74,7 @@ namespace
                 json_string = row[0];
             }
 
-            if (json_string.empty())
-            {
+            if (json_string.empty()) {
                 const char* msg = "Rule Engine Plugin Configuration not set as metadata";
 
                 // clang-format off

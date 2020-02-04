@@ -21,13 +21,6 @@
 #include <system_error>
 #include <stdexcept>
 
-// XXX NOTE
-// ~~~~~~~~
-// - iRODS groups cannot be a member of iRODS groups.
-//   + iRODS users are groups.
-//   + And other crazy stuff.
-// - Renaming users/groups is not supported.
-
 namespace irods::experimental::administration
 {
     // Types
