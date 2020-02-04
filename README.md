@@ -36,7 +36,7 @@ should be similar to the following:
 ```
 
 ## Configuration
-The Rule Engine Plugin (REP) config is set as metadata on the zone collection (e.g. `/tempZone`).
+The Rule Engine Plugin config is set as metadata on the **zone collection** (e.g. `/tempZone`).
 Each option is explained below.
 ```javascript
 {
@@ -44,7 +44,7 @@ Each option is explained below.
     // This option supersedes all other options.
     "admin_only": true,
 
-    // The options that follow are only considered if "admin_only" does not exist
+    // The following options only apply if "admin_only" does not exist
     // or it is set to false.
 
     // The list of strings that represent metadata that should be guarded.
@@ -72,16 +72,16 @@ Once you've decided on what your config will be, you'll need to use `imeta` to s
 ```bash
 $ imeta set -C /tempZone irods::metadata_guard '{"admin_only": true}'
 ```
-Anytime a request to modify metadata is detected by the server, the rule engine plugin will read the JSON
+Anytime a request to modify metadata is detected by the server, the Rule Engine Plugin will read the JSON
 config and determine whether the user should be allowed to continue.
 
 **NOTE: The user setting the metadata on the zone collection must have write permission on that collection!**
 
 ## Enabling the Rule Engine Plugin
-To enable, prepend the following plugin config to the list of rule engines in `/etc/irods/server_config.json`. 
+To enable, add the following plugin config to the list of rule engines in `/etc/irods/server_config.json`. 
 The plugin config should be placed before any rule engines that need metadata to be guarded.
 
-Even though this plugin will process PEPs first due to it's positioning, subsequent Rule Engine Plugins (REP) will 
+Even though this plugin will process PEPs first due to it's positioning, subsequent Rule Engine Plugins will 
 still be allowed to process the same PEPs without any issues.
 ```javascript
 "rule_engines": [
@@ -91,8 +91,14 @@ still be allowed to process the same PEPs without any issues.
         "plugin_specific_configuration": {}
     },
     
-    // ... Previously installed rule engine plugin configs ...
+    // ... Previously installed Rule Engine Plugin configs ...
 ]
 
 ```
+
+## Troubleshooting
+
+### Q. What happens if the JSON configuration is incorrect (i.e. invalid JSON format)?
+A. The log file will contain error messages saying the JSON config could not be parsed. Having a bad config can
+be viewed as not having the metadata guard Rule Engine Plugin installed at all.
 
