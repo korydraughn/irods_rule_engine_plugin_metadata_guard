@@ -42,14 +42,15 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
         count = 0
 
         with lib.file_backed_up(config.server_config_path):
-            self.enable_rule_engine_plugin(config)
+            with lib.file_backed_up(config.client_environment_path):
+                self.enable_rule_engine_plugin(config)
 
-            # This should cause an exception to be thrown and logged, but users
-            # should still be able to proceed. Verify that the log contains a valid
-            # error message.
-            log_offset = lib.get_file_size_by_path(paths.server_log_path())
-            self.rods.assert_icommand(['imeta', 'set', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
-            count = lib.count_occurrences_of_string_in_log(paths.server_log_path(), 'Cannot parse Rule Engine Plugin configuration', log_offset)
+                # This should cause an exception to be thrown and logged, but users
+                # should still be able to proceed. Verify that the log contains a valid
+                # error message.
+                log_offset = lib.get_file_size_by_path(paths.server_log_path())
+                self.rods.assert_icommand(['imeta', 'set', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
+                count = lib.count_occurrences_of_string_in_log(paths.server_log_path(), 'Cannot parse Rule Engine Plugin configuration', log_offset)
 
         # Clean up.
         self.rods.assert_icommand(['imeta', 'rm', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
@@ -74,16 +75,17 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
         self.rods.assert_icommand(['imeta', 'set', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
 
         with lib.file_backed_up(config.server_config_path):
-            self.enable_rule_engine_plugin(config)
+            with lib.file_backed_up(config.client_environment_path):
+                self.enable_rule_engine_plugin(config)
 
-            coll = self.admin.session_collection
-            attribute_name = 'irods::guarded_attribute'
-            self.admin.assert_icommand(['imeta', 'set', '-C', coll, attribute_name, 'abc'])
-            self.admin.assert_icommand(['ichmod', 'write', self.user.username, coll])
+                coll = self.admin.session_collection
+                attribute_name = 'irods::guarded_attribute'
+                self.admin.assert_icommand(['imeta', 'set', '-C', coll, attribute_name, 'abc'])
+                self.admin.assert_icommand(['ichmod', 'write', self.user.username, coll])
 
-            new_attr_value = 'DEF'
-            self.user.assert_icommand(['imeta', 'set', '-C', coll, attribute_name, new_attr_value])
-            self.admin.assert_icommand(['imeta', 'rm', '-C', coll, attribute_name, new_attr_value])
+                new_attr_value = 'DEF'
+                self.user.assert_icommand(['imeta', 'set', '-C', coll, attribute_name, new_attr_value])
+                self.admin.assert_icommand(['imeta', 'rm', '-C', coll, attribute_name, new_attr_value])
 
         # Clean up.
         self.rods.assert_icommand(['imeta', 'rm', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
@@ -120,14 +122,15 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
             self.rods.assert_icommand(['imeta', 'set', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
 
             with lib.file_backed_up(config.server_config_path):
-                self.enable_rule_engine_plugin(config)
+                with lib.file_backed_up(config.client_environment_path):
+                    self.enable_rule_engine_plugin(config)
 
-                coll = self.admin.session_collection
-                attribute_name = 'irods::guarded_attribute'
-                self.admin.assert_icommand(['imeta', 'set', '-C', coll, attribute_name, 'abc'])
-                self.admin.assert_icommand(['ichmod', 'write', self.user.username, coll])
+                    coll = self.admin.session_collection
+                    attribute_name = 'irods::guarded_attribute'
+                    self.admin.assert_icommand(['imeta', 'set', '-C', coll, attribute_name, 'abc'])
+                    self.admin.assert_icommand(['ichmod', 'write', self.user.username, coll])
 
-                self.user.assert_icommand(['imeta', 'set', '-C', coll, attribute_name, 'DEF'], 'STDERR', ['CAT_INSUFFICIENT_PRIVILEGE_LEVEL'])
+                    self.user.assert_icommand(['imeta', 'set', '-C', coll, attribute_name, 'DEF'], 'STDERR', ['CAT_INSUFFICIENT_PRIVILEGE_LEVEL'])
 
             # Clean up.
             self.rods.assert_icommand(['imeta', 'rm', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
