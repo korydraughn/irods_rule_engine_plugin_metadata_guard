@@ -139,14 +139,13 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
     #
 
     def enable_rule_engine_plugin(self, config):
-        config.server_config['log_level']['rule_engine'] = 'trace'
-        config.server_config['log_level']['legacy'] = 'trace'
         config.server_config['plugin_configuration']['rule_engines'].insert(0, {
             'instance_name': 'irods_rule_engine_plugin-metadata_guard-instance',
             'plugin_name': 'irods_rule_engine_plugin-metadata_guard',
             'plugin_specific_configuration': {}
         })
         lib.update_json_file_from_dict(config.server_config_path, config.server_config)
+        lib.update_json_file_from_dict(config.client_environment_path, {'irods_log_level': 7})
 
     def metadata_guard_attribute_name(self):
         return 'irods::metadata_guard'

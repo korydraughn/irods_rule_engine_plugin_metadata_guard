@@ -7,11 +7,11 @@
 #include <irods/irods_get_full_path_for_config_file.hpp>
 #include <irods/irods_at_scope_exit.hpp>
 #include <irods/irods_query.hpp>
-#include <irods/irods_logger.hpp>
 #include <irods/irods_rs_comm_query.hpp>
 #include <irods/irods_state_table.h>
 #include <irods/rodsError.h>
 #include <irods/rodsErrorTable.h>
+#include <irods/rodsLog.h>
 
 #include <json.hpp>
 
@@ -24,10 +24,7 @@
 
 namespace
 {
-    // clang-format off
-    using log  = irods::experimental::log;
     using json = nlohmann::json;
-    // clang-format on
 
     auto get_rei(irods::callback& _effect_handler) -> ruleExecInfo_t&
     {
@@ -76,13 +73,7 @@ namespace
 
             if (json_string.empty()) {
                 const char* msg = "Rule Engine Plugin Configuration not set as metadata";
-
-                // clang-format off
-                log::rule_engine::error({{"rule_engine_plugin", "metdata_guard"},
-                                         {"rule_engine_plugin_function", __func__},
-                                         {"log_message", msg}});
-                // clang-format on
-
+                rodsLog(LOG_ERROR, "[metadata_guard] %s", msg);
                 THROW(SYS_CONFIG_FILE_ERR, msg);
             }
 
@@ -96,10 +87,7 @@ namespace
             return CODE(RULE_ENGINE_CONTINUE);
         }
 
-        // clang-format off
-        log::rule_engine::error({{"log_message", "User is not allowed to modify metadata."},
-                                 {"rule_engine_plugin", "metadata_guard"}});
-        // clang-format on
+        rodsLog(LOG_ERROR, "[metadata_guard] User is not allowed to modify metadata.");
 
         return ERROR(CAT_INSUFFICIENT_PRIVILEGE_LEVEL, "User must be an admininstrator to modify metadata");
     }
@@ -190,30 +178,18 @@ namespace
                 }
             }
 
-            // clang-format off
-            log::rule_engine::error({{"log_message", "User is not allowed to modify metadata [attribute => " + std::string{input->arg3} + ']'},
-                                     {"rule_engine_plugin", "metadata_guard"}});
-            // clang-format on
+            rodsLog(LOG_ERROR, "[metadata_guard] User is not allowed to modify metadata [attribute => %s].", input->arg3);
 
             return ERROR(CAT_INSUFFICIENT_PRIVILEGE_LEVEL, "User is not allowed to modify metadata");
         }
         catch (const json::parse_error& e) {
-            // clang-format off
-            log::rule_engine::error({{"log_message", "Cannot parse Rule Engine Plugin configuration."},
-                                     {"rule_engine_plugin", "metadata_guard"}});
-            // clang-format on
+            rodsLog(LOG_ERROR, "[metadata_guard] Cannot parse Rule Engine Plugin configuration.");
         }
         catch (const json::type_error& e) {
-            // clang-format off
-            log::rule_engine::error({{"log_message", "Missing or incorrect configuration properties."},
-                                     {"rule_engine_plugin", "metadata_guard"}});
-            // clang-format on
+            rodsLog(LOG_ERROR, "[metadata_guard] Missing or incorrect configuration properties.");
         }
         catch (const std::exception& e) {
-            // clang-format off
-            log::rule_engine::error({{"log_message", e.what()},
-                                     {"rule_engine_plugin", "metadata_guard"}});
-            // clang-format on
+            rodsLog(LOG_ERROR, "[metadata_guard] %s", e.what());
         }
 
         return CODE(RULE_ENGINE_CONTINUE);

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.7.0 FATAL_ERROR)
 
-find_package(IRODS REQUIRED)
+find_package(IRODS 4.2.8 EXACT REQUIRED)
 
 set(IRODS_PLUGIN_REVISION "0")
 
@@ -48,9 +48,6 @@ target_compile_definitions(${PLUGIN} PRIVATE ${IRODS_COMPILE_DEFINITIONS}
                                              IRODS_ENABLE_SYSLOG
                                              IRODS_FILESYSTEM_ENABLE_SERVER_SIDE_API
                                              IRODS_USER_ADMINISTRATION_ENABLE_SERVER_SIDE_API)
-                                             #IRODS_IO_TRANSPORT_ENABLE_SERVER_SIDE_API
-                                             #FMT_HEADER_ONLY
-                                             #SPDLOG_FMT_EXTERNAL)
 
 target_include_directories(${PLUGIN} PRIVATE ${IRODS_INCLUDE_DIRS}
                                              ${IRODS_EXTERNALS_FULLPATH_CLANG}/include/c++/v1
