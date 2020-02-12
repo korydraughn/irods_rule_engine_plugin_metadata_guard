@@ -148,8 +148,8 @@ namespace
 
             // JSON Configuration structure:
             // {
-            //   "admin_only": true,
             //   "prefixes": ["irods::"],
+            //   "admin_only": true,
             //   "editors": [
             //     {"type": "group", "name": "rodsadmin"},
             //     {"type": "user",  "name": "kory"},
@@ -157,16 +157,15 @@ namespace
             //   ]
             // }
 
-            // The "admin_only" flag supersedes all other configuration options.
-            // If this flag is true, all other configuration options will be ignored.
-            if (config.count("admin_only") && config.at("admin_only").get<bool>()) {
-                return user_is_administrator(*rei.rsComm);
-            }
-
             for (auto&& prefix : config.at("prefixes")) {
                 // If the metadata attribute starts with the prefix, then verify that the user
                 // can modify the metadata attribute.
                 if (boost::starts_with(input->arg3, prefix.get<std::string>())) {
+                    // The "admin_only" flag supersedes the "editors" configuration option.
+                    if (config.count("admin_only") && config.at("admin_only").get<bool>()) {
+                        return user_is_administrator(*rei.rsComm);
+                    }
+
                     namespace ua = irods::experimental::administration;
 
                     const ua::user user{rei.uoic->userName, rei.uoic->rodsZone};

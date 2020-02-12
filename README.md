@@ -40,17 +40,15 @@ The Rule Engine Plugin config is set as metadata on the **zone collection** (e.g
 Each option is explained below.
 ```javascript
 {
-    // Only administrators are allowed to modify metadata.
-    // This option supersedes all other options.
-    "admin_only": true,
-
-    // The following options only apply if "admin_only" does not exist
-    // or it is set to false.
-
     // The list of strings that represent metadata that should be guarded.
     // In this example, any metadata beginning with "irods::" will be treated special
-    // and require that the user be classified as an editor.
+    // and require that the user be an administrator or classified as an editor depending
+    // on the configuration.
     "prefixes": ["irods::"],
+
+    // Only administrators are allowed to modify metadata.
+    // This option supersedes the "editors" option.
+    "admin_only": true,
 
     // The list of editors that can modify guarded metadata.
     "editors": [
@@ -70,7 +68,7 @@ Each option is explained below.
 ```
 Once you've decided on what your config will be, you'll need to use `imeta` to set it. For example:
 ```bash
-$ imeta set -C /tempZone irods::metadata_guard '{"admin_only": true}'
+$ imeta set -C /tempZone irods::metadata_guard '{"prefixes": ["irods::"], "admin_only": true}'
 ```
 Anytime a request to modify metadata is detected by the server, the Rule Engine Plugin will read the JSON
 config and determine whether the user should be allowed to continue.
