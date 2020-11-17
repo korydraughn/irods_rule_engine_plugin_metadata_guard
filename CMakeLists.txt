@@ -36,8 +36,7 @@ set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -stdlib=libc++ -Wl,-
 
 set(PLUGIN irods_rule_engine_plugin-metadata_guard)
 
-add_library(${PLUGIN} MODULE ${CMAKE_SOURCE_DIR}/src/main.cpp
-                             ${CMAKE_SOURCE_DIR}/src/user_administration.cpp)
+add_library(${PLUGIN} MODULE ${CMAKE_SOURCE_DIR}/src/main.cpp)
 
 set_target_properties(${PLUGIN} PROPERTIES CXX_STANDARD ${IRODS_CXX_STANDARD})
 
