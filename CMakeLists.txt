@@ -55,12 +55,14 @@ target_include_directories(${PLUGIN} PRIVATE ${IRODS_INCLUDE_DIRS}
                                              ${IRODS_EXTERNALS_FULLPATH_CLANG}/include/c++/v1
                                              ${IRODS_EXTERNALS_FULLPATH_BOOST}/include
                                              ${IRODS_EXTERNALS_FULLPATH_SPDLOG}/include
+                                             ${IRODS_EXTERNALS_FULLPATH_FMT}/include
                                              ${IRODS_EXTERNALS_FULLPATH_JSON}/include)
 
 target_link_libraries(${PLUGIN} PRIVATE irods_server
                                         irods_common
                                         ${IRODS_EXTERNALS_FULLPATH_BOOST}/lib/libboost_filesystem.so
                                         ${IRODS_EXTERNALS_FULLPATH_BOOST}/lib/libboost_system.so
+                                        ${IRODS_EXTERNALS_FULLPATH_FMT}/lib/libfmt.so
                                         c++abi
                                         dl)
 
