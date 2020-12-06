@@ -12,10 +12,7 @@ project(irods_rule_engine_plugin-metadata_guard C CXX)
 
 include(${IRODS_TARGETS_PATH})
 
-if (NOT CPACK_PACKAGING_INSTALL_PREFIX)
-    set(CPACK_PACKAGING_INSTALL_PREFIX "/" CACHE STRING "Package root path. \"/\" is correct for normal package builds.." FORCE)
-    message(STATUS "Setting unspecified CPACK_PACKAGING_INSTALL_PREFIX to '${CPACK_PACKAGING_INSTALL_PREFIX}'. This is the correct setting for normal builds.")
-endif()
+include(GNUInstallDirs)
 
 if (NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build {Debug, Release}." FORCE)
