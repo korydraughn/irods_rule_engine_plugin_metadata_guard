@@ -58,7 +58,7 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
         self.assertTrue(count > 0)
 
     @unittest.skipIf(test.settings.RUN_IN_TOPOLOGY, "Skip for Topology Testing")
-    def test_users_can_modify_guarded_metadata(self):
+    def test_authorized_users_can_modify_guarded_metadata(self):
 	config = IrodsConfig()
 
         # Set JSON configuration for the root collection.
@@ -91,7 +91,7 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
         self.rods.assert_icommand(['imeta', 'rm', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
 
     @unittest.skipIf(test.settings.RUN_IN_TOPOLOGY, "Skip for Topology Testing")
-    def test_users_cannot_modify_guarded_metadata(self):
+    def test_unauthorized_users_cannot_modify_guarded_metadata(self):
 	config = IrodsConfig()
 
         root_coll = os.path.join('/', self.admin.zone_name)
@@ -128,14 +128,48 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
                     coll = self.admin.session_collection
                     attribute_name = 'irods::guarded_attribute'
                     self.admin.assert_icommand(['imeta', 'set', '-C', coll, attribute_name, 'abc'])
+                    self.admin.assert_icommand(['imeta', 'add', '-C', coll, attribute_name, 'def'])
+
+                    def check_metadata():
+                        out, err, ec = self.admin.run_icommand(['imeta', 'ls', '-C', coll])
+                        self.assertEquals(ec, 0)
+                        self.assertEquals(len(err), 0)
+                        self.assertTrue('attribute: {0}\nvalue: {1}'.format(attribute_name, 'abc') in out)
+                        self.assertTrue('attribute: {0}\nvalue: {1}'.format(attribute_name, 'def') in out)
+                        self.assertTrue('attribute: {0}\nvalue: {1}'.format(attribute_name, 'DEF') not in out)
+                        self.assertTrue('attribute: {0}\nvalue: {1}'.format(attribute_name, 'GHI') not in out)
+
+                    # Verify that the metadata is what we expect.
+                    check_metadata()
+
+                    # Give an unauthorized user write access to the collection with protected metadata.
                     self.admin.assert_icommand(['ichmod', 'write', self.user.username, coll])
 
                     self.user.assert_icommand(['imeta', 'set', '-C', coll, attribute_name, 'DEF'], 'STDERR', ['CAT_INSUFFICIENT_PRIVILEGE_LEVEL'])
+                    self.user.assert_icommand(['imeta', 'add', '-C', coll, attribute_name, 'GHI'], 'STDERR', ['CAT_INSUFFICIENT_PRIVILEGE_LEVEL'])
+
+                    # Show that the plugin protected the metadata.
+                    check_metadata()
 
             # Clean up.
             self.rods.assert_icommand(['imeta', 'rm', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
 
         self.rods.assert_icommand(['iadmin', 'rfg', 'rodsadmin', self.admin.username])
+
+    @unittest.skipIf(test.settings.RUN_IN_TOPOLOGY, "Skip for Topology Testing")
+    def test_plugin_does_not_throw_exception_when_json_config_has_not_been_set_as_metadata(self):
+	config = IrodsConfig()
+
+        with lib.file_backed_up(config.server_config_path):
+            self.enable_rule_engine_plugin(config)
+
+            log_offset = lib.get_file_size_by_path(paths.server_log_path())
+            self.admin.assert_icommand(['imeta', 'set', '-C', self.admin.session_collection, 'a', 'v'])
+            self.admin.assert_icommand(['imeta', 'ls', '-C', self.admin.session_collection], 'STDOUT', ['attribute: a', 'value: v'])
+
+            self.assertEquals(lib.count_occurrences_of_string_in_log(paths.server_log_path(), 'error', log_offset), 0)
+            self.assertEquals(lib.count_occurrences_of_string_in_log(paths.server_log_path(), 'exception', log_offset), 0)
+            self.assertEquals(lib.count_occurrences_of_string_in_log(paths.server_log_path(), 'SYS_CONFIG_FILE_ERR', log_offset), 0)
 
     #
     # Utility Functions
