@@ -1,5 +1,3 @@
-#include "user_administration.hpp"
-
 #include <irods/irods_plugin_context.hpp>
 #include <irods/irods_re_plugin.hpp>
 #include <irods/irods_re_serialization.hpp>
@@ -12,7 +10,10 @@
 #include <irods/irods_state_table.h>
 #include <irods/rodsError.h>
 #include <irods/rodsErrorTable.h>
+#include <irods/user_administration.hpp>
+#include <irods/scoped_privileged_client.hpp>
 
+#include <fmt/format.h>
 #include <json.hpp>
 
 #include <boost/any.hpp>
@@ -21,6 +22,7 @@
 #include <string>
 #include <algorithm>
 #include <array>
+#include <optional>
 
 namespace
 {
@@ -41,56 +43,31 @@ namespace
         return *rei;
     }
 
-    template <typename Function>
-    auto sudo(ruleExecInfo_t& _rei, Function _func) -> decltype(_func())
-    {
-        auto& auth_flag = _rei.rsComm->clientUser.authInfo.authFlag;
-        const auto old_auth_flag = auth_flag;
-
-        // Elevate privileges.
-        auth_flag = LOCAL_PRIV_USER_AUTH;
-
-        // Restore authorization flags on exit.
-        irods::at_scope_exit at_scope_exit{[&auth_flag, old_auth_flag] {
-            auth_flag = old_auth_flag;
-        }};
-
-        return _func();
-    }
-
-    auto load_plugin_config(ruleExecInfo_t& _rei) -> json
+    auto load_plugin_config(ruleExecInfo_t& _rei) -> std::optional<json>
     {
         // Must elevate privileges so that the configuration can be retrieved.
         // Users who aren't administrators cannot retrieve metadata they don't own.
-        return sudo(_rei, [&_rei] {
-            std::string json_string;
+        irods::experimental::scoped_privileged_client spc{*_rei.rsComm};
 
-            std::string gql = "select META_COLL_ATTR_VALUE "
-                              "where META_COLL_ATTR_NAME = 'irods::metadata_guard' and COLL_NAME = '/";
-            gql += _rei.rsComm->myEnv.rodsZone;
-            gql += "'";
+        const auto gql = fmt::format("select META_COLL_ATTR_VALUE "
+                                     "where META_COLL_ATTR_NAME = 'irods::metadata_guard' and COLL_NAME = '/{}'",
+                                     _rei.rsComm->myEnv.rodsZone);
 
-            for (auto&& row : irods::query{_rei.rsComm, gql}) {
-                json_string = row[0];
+        if (irods::query q{_rei.rsComm, gql}; q.size() > 0) {
+            try {
+                return json::parse(q.front()[0]);
             }
-
-            if (json_string.empty()) {
-                const char* msg = "Rule Engine Plugin Configuration not set as metadata";
-
-                // clang-format off
-                log::rule_engine::error({{"rule_engine_plugin", "metdata_guard"},
-                                         {"rule_engine_plugin_function", __func__},
-                                         {"log_message", msg}});
-                // clang-format on
-
+            catch (const json::exception&) {
+                const char* msg = "Cannot parse Rule Engine Plugin configuration";
+                log::rule_engine::error({{"log_message", fmt::format("{}.", msg)}, {"rule_engine_plugin", "metadata_guard"}});
                 THROW(SYS_CONFIG_FILE_ERR, msg);
             }
+        }
 
-            return json::parse(json_string);
-        });
+        return std::nullopt;
     }
 
-    auto user_is_administrator(const rsComm_t& conn) -> irods::error
+    auto user_is_administrator(rsComm_t& conn) -> irods::error
     {
         if (irods::is_privileged_client(conn)) {
             return CODE(RULE_ENGINE_CONTINUE);
@@ -131,20 +108,11 @@ namespace
         try {
             auto* input = boost::any_cast<modAVUMetadataInp_t*>(*std::next(std::begin(_rule_arguments), 2));
             auto& rei = get_rei(_effect_handler);
+            const auto config = load_plugin_config(rei);
 
-            const auto is_modification = [op = std::string_view{input->arg0}]() noexcept
-            {
-                static const auto ops = {"set", "mod", "rm", "rmw", "rmi"};
-                return std::any_of(std::begin(ops), std::end(ops), [&op](auto&& mod_op) {
-                    return op == mod_op;
-                });
-            };
-
-            if (!is_modification()) {
+            if (!config) {
                 return CODE(RULE_ENGINE_CONTINUE);
             }
-
-            const auto config = load_plugin_config(rei);
 
             // JSON Configuration structure:
             // {
@@ -156,30 +124,29 @@ namespace
             //     {"type": "user",  "name": "jane#otherZone"}
             //   ]
             // }
-
-            for (auto&& prefix : config.at("prefixes")) {
+            for (auto&& prefix : config->at("prefixes")) {
                 // If the metadata attribute starts with the prefix, then verify that the user
                 // can modify the metadata attribute.
                 if (boost::starts_with(input->arg3, prefix.get<std::string>())) {
                     // The "admin_only" flag supersedes the "editors" configuration option.
-                    if (config.count("admin_only") && config.at("admin_only").get<bool>()) {
+                    if (config->count("admin_only") && config->at("admin_only").get<bool>()) {
                         return user_is_administrator(*rei.rsComm);
                     }
 
-                    namespace ua = irods::experimental::administration;
+                    namespace adm = irods::experimental::administration;
 
-                    const ua::user user{rei.uoic->userName, rei.uoic->rodsZone};
+                    const adm::user user{rei.uoic->userName, rei.uoic->rodsZone};
 
-                    for (auto&& editor : config.at("editors")) {
+                    for (auto&& editor : config->at("editors")) {
                         if (const auto type = editor.at("type").get<std::string>(); type == "group") {
-                            const ua::group group{editor.at("name").get<std::string>()};
+                            const adm::group group{editor.at("name").get<std::string>()};
 
-                            if (ua::server::user_is_member_of_group(*rei.rsComm, group, user)) {
+                            if (adm::server::user_is_member_of_group(*rei.rsComm, group, user)) {
                                 return CODE(RULE_ENGINE_CONTINUE);
                             }
                         }
                         else if (type == "user") {
-                            if (editor.at("name").get<std::string>() == ua::server::local_unique_name(*rei.rsComm, user)) {
+                            if (editor.at("name").get<std::string>() == adm::server::local_unique_name(*rei.rsComm, user)) {
                                 return CODE(RULE_ENGINE_CONTINUE);
                             }
                         }
@@ -190,29 +157,20 @@ namespace
             }
 
             // clang-format off
-            log::rule_engine::error({{"log_message", "User is not allowed to modify metadata [attribute => " + std::string{input->arg3} + ']'},
+            log::rule_engine::error({{"log_message", fmt::format("User is not allowed to modify metadata [attribute={}]", input->arg3)},
                                      {"rule_engine_plugin", "metadata_guard"}});
             // clang-format on
 
             return ERROR(CAT_INSUFFICIENT_PRIVILEGE_LEVEL, "User is not allowed to modify metadata");
         }
-        catch (const json::parse_error& e) {
+        catch (const json::exception&) {
             // clang-format off
-            log::rule_engine::error({{"log_message", "Cannot parse Rule Engine Plugin configuration."},
-                                     {"rule_engine_plugin", "metadata_guard"}});
-            // clang-format on
-        }
-        catch (const json::type_error& e) {
-            // clang-format off
-            log::rule_engine::error({{"log_message", "Missing or incorrect configuration properties."},
+            log::rule_engine::error({{"log_message", "Unexpected JSON access or type error."},
                                      {"rule_engine_plugin", "metadata_guard"}});
             // clang-format on
         }
         catch (const std::exception& e) {
-            // clang-format off
-            log::rule_engine::error({{"log_message", e.what()},
-                                     {"rule_engine_plugin", "metadata_guard"}});
-            // clang-format on
+            log::rule_engine::error({{"log_message", e.what()}, {"rule_engine_plugin", "metadata_guard"}});
         }
 
         return CODE(RULE_ENGINE_CONTINUE);
