@@ -4,42 +4,41 @@ find_package(IRODS 4.2.10 EXACT REQUIRED)
 set(IRODS_PLUGIN_REVISION "0")
 set(IRODS_PLUGIN_VERSION "${IRODS_VERSION}.${IRODS_PLUGIN_REVISION}")
 
-set(CMAKE_C_COMPILER ${IRODS_EXTERNALS_FULLPATH_CLANG}/bin/clang)
 set(CMAKE_CXX_COMPILER ${IRODS_EXTERNALS_FULLPATH_CLANG}/bin/clang++)
-set(CMAKE_EXE_LINKER_FLAGS_INIT "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
+set(CMAKE_CXX_STANDARD ${IRODS_CXX_STANDARD})
+set(CMAKE_MODULE_LINKER_FLAGS_INIT "-Wl,--enable-new-dtags -Wl,--as-needed -Wl,-z,defs")
+set(CMAKE_SHARED_LINKER_FLAGS_INIT "-Wl,--enable-new-dtags -Wl,--as-needed -Wl,-z,defs")
+set(CMAKE_MODULE_LINKER_FLAGS_RELEASE_INIT "-Wl,--gc-sections -Wl,-z,combreloc")
+set(CMAKE_SHARED_LINKER_FLAGS_RELEASE_INIT "-Wl,--gc-sections -Wl,-z,combreloc")
 
 project(irods_rule_engine_plugin-metadata_guard
   VERSION "${IRODS_PLUGIN_VERSION}"
-  LANGUAGES C CXX)
+  LANGUAGES CXX)
+
+set(CMAKE_SKIP_BUILD_RPATH OFF)
+set(CMAKE_SKIP_INSTALL_RPATH OFF)
+set(CMAKE_SKIP_RPATH OFF)
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH ON)
+set(CMAKE_BUILD_WITH_INSTALL_RPATH OFF)
+set(CMAKE_BUILD_RPATH_USE_ORIGIN ON)
 
 include(${IRODS_TARGETS_PATH})
 
 include(GNUInstallDirs)
+include(UseLibCXX)
 
 if (NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build {Debug, Release}." FORCE)
     message(STATUS "Setting unspecified CMAKE_BUILD_TYPE to '${CMAKE_BUILD_TYPE}'")
 endif()
 
-if (NOT IRODS_EXTERNALS_PACKAGE_ROOT)
-    set(IRODS_EXTERNALS_PACKAGE_ROOT "/opt/irods-externals" CACHE STRING "Choose the location of iRODS external packages." FORCE)
-    message(STATUS "Setting unspecified IRODS_EXTERNALS_PACKAGE_ROOT to '${IRODS_EXTERNALS_PACKAGE_ROOT}'")
-endif()
-
 set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
-
-set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-set(CMAKE_INSTALL_RPATH ${IRODS_EXTERNALS_FULLPATH_CLANG_RUNTIME}/lib)
-set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
-set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -stdlib=libc++ -Wl,-z,defs")
 
 set(PLUGIN irods_rule_engine_plugin-metadata_guard)
 
 add_library(${PLUGIN} MODULE ${CMAKE_SOURCE_DIR}/src/main.cpp)
 
-set_target_properties(${PLUGIN} PROPERTIES CXX_STANDARD ${IRODS_CXX_STANDARD})
-
-target_compile_options(${PLUGIN} PRIVATE -Wno-write-strings -nostdinc++)
+target_compile_options(${PLUGIN} PRIVATE -Wno-write-strings)
 
 target_compile_definitions(${PLUGIN} PRIVATE ${IRODS_COMPILE_DEFINITIONS}
                                              IRODS_QUERY_ENABLE_SERVER_SIDE_API
@@ -48,7 +47,6 @@ target_compile_definitions(${PLUGIN} PRIVATE ${IRODS_COMPILE_DEFINITIONS}
                                              IRODS_USER_ADMINISTRATION_ENABLE_SERVER_SIDE_API)
 
 target_include_directories(${PLUGIN} PRIVATE ${IRODS_INCLUDE_DIRS}
-                                             ${IRODS_EXTERNALS_FULLPATH_CLANG}/include/c++/v1
                                              ${IRODS_EXTERNALS_FULLPATH_BOOST}/include
                                              ${IRODS_EXTERNALS_FULLPATH_SPDLOG}/include
                                              ${IRODS_EXTERNALS_FULLPATH_FMT}/include
@@ -59,7 +57,6 @@ target_link_libraries(${PLUGIN} PRIVATE irods_server
                                         ${IRODS_EXTERNALS_FULLPATH_BOOST}/lib/libboost_filesystem.so
                                         ${IRODS_EXTERNALS_FULLPATH_BOOST}/lib/libboost_system.so
                                         ${IRODS_EXTERNALS_FULLPATH_FMT}/lib/libfmt.so
-                                        c++abi
                                         dl)
 
 install(TARGETS ${PLUGIN} LIBRARY DESTINATION ${IRODS_PLUGINS_DIRECTORY}/rule_engines)
