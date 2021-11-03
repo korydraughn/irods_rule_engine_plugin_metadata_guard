@@ -121,7 +121,7 @@ namespace
             for (auto&& prefix : config->at("prefixes")) {
                 // If the metadata attribute starts with the prefix, then verify that the user
                 // can modify the metadata attribute.
-                if (boost::starts_with(input->arg3, prefix.get<std::string>())) {
+                if (boost::starts_with(input->arg3, prefix.get_ref<const std::string&>())) {
                     // The "admin_only" flag supersedes the "editors" configuration option.
                     if (config->count("admin_only") && config->at("admin_only").get<bool>()) {
                         return user_is_administrator(*rei.rsComm);
@@ -132,27 +132,26 @@ namespace
                     const adm::user user{rei.uoic->userName, rei.uoic->rodsZone};
 
                     for (auto&& editor : config->at("editors")) {
-                        if (const auto type = editor.at("type").get<std::string>(); type == "group") {
-                            const adm::group group{editor.at("name").get<std::string>()};
+                        if (const auto& type = editor.at("type").get_ref<const std::string&>(); type == "group") {
+                            const adm::group group{editor.at("name").get_ref<const std::string&>()};
 
                             if (adm::server::user_is_member_of_group(*rei.rsComm, group, user)) {
                                 return CODE(RULE_ENGINE_CONTINUE);
                             }
                         }
                         else if (type == "user") {
-                            if (editor.at("name").get<std::string>() == adm::server::local_unique_name(*rei.rsComm, user)) {
+                            if (editor.at("name").get_ref<const std::string&>() == adm::server::local_unique_name(*rei.rsComm, user)) {
                                 return CODE(RULE_ENGINE_CONTINUE);
                             }
                         }
                     }
 
-                    break;
+                    // At this point, the user is not an administrator and they aren't a member of
+                    // the editors list. Therefore, we return an error because the user is attempting to
+                    // modify metadata in a guarded namespace.
+                    return ERROR(CAT_INSUFFICIENT_PRIVILEGE_LEVEL, "User is not allowed to modify metadata");
                 }
             }
-
-            rodsLog(LOG_ERROR, "[metadata_guard] User is not allowed to modify metadata [attribute=%s].", input->arg3);
-
-            return ERROR(CAT_INSUFFICIENT_PRIVILEGE_LEVEL, "User is not allowed to modify metadata");
         }
         catch (const json::exception&) {
             rodsLog(LOG_ERROR, "[metadata_guard] Unexpected JSON access or type error.");

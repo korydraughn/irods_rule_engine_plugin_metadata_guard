@@ -58,7 +58,7 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
         self.assertTrue(count > 0)
 
     @unittest.skipIf(test.settings.RUN_IN_TOPOLOGY, "Skip for Topology Testing")
-    def test_authorized_users_can_modify_guarded_metadata(self):
+    def test_authorized_users_via_editors_list_can_manipulate_metadata_in_guarded_namespace(self):
 	config = IrodsConfig()
 
         # Set JSON configuration for the root collection.
@@ -91,7 +91,7 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
         self.rods.assert_icommand(['imeta', 'rm', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
 
     @unittest.skipIf(test.settings.RUN_IN_TOPOLOGY, "Skip for Topology Testing")
-    def test_unauthorized_users_cannot_modify_guarded_metadata(self):
+    def test_unauthorized_users_cannot_manipulate_metadata_in_guarded_namespace(self):
 	config = IrodsConfig()
 
         root_coll = os.path.join('/', self.admin.zone_name)
@@ -170,6 +170,63 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
             self.assertEquals(lib.count_occurrences_of_string_in_log(paths.server_log_path(), 'error', log_offset), 0)
             self.assertEquals(lib.count_occurrences_of_string_in_log(paths.server_log_path(), 'exception', log_offset), 0)
             self.assertEquals(lib.count_occurrences_of_string_in_log(paths.server_log_path(), 'SYS_CONFIG_FILE_ERR', log_offset), 0)
+
+    def test_plugin_honors_admin_only_config_option_when_rodsadmins_manipulate_metadata__issue_25(self):
+	config = IrodsConfig()
+
+        # Set JSON configuration for the root collection.
+        root_coll = os.path.join('/', self.admin.zone_name)
+        json_config = json.dumps({
+            'prefixes': ['irods::'],
+            'admin_only': True
+        })
+        self.rods.assert_icommand(['imeta', 'set', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
+
+        with lib.file_backed_up(config.server_config_path):
+            self.enable_rule_engine_plugin(config)
+
+            # Show that metadata can be manipulated by admins.
+            for attribute_name in ['issue_25', 'irods::issue_25']:
+                self.admin.assert_icommand(['imeta', 'set', '-C', self.admin.session_collection, attribute_name, 'v0'])
+                self.admin.assert_icommand(['imeta', 'add', '-C', self.admin.session_collection, attribute_name, 'v1'])
+                self.admin.assert_icommand(['imeta', 'ls', '-C', self.admin.session_collection], 'STDOUT', ['attribute: ' + attribute_name, 'value: v0', 'value: v1'])
+                self.admin.assert_icommand(['imeta', 'rm', '-C', self.admin.session_collection, attribute_name, 'v0'])
+                self.admin.assert_icommand(['imeta', 'rm', '-C', self.admin.session_collection, attribute_name, 'v1'])
+
+        # Clean up.
+        self.rods.assert_icommand(['imeta', 'rm', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
+
+    def test_plugin_honors_admin_only_config_option_when_rodsusers_manipulate_metadata__issue_25(self):
+	config = IrodsConfig()
+
+        # Set JSON configuration for the root collection.
+        root_coll = os.path.join('/', self.admin.zone_name)
+        json_config = json.dumps({
+            'prefixes': ['irods::'],
+            'admin_only': True
+        })
+        self.rods.assert_icommand(['imeta', 'set', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
+
+        with lib.file_backed_up(config.server_config_path):
+            self.enable_rule_engine_plugin(config)
+
+            # Show that unguarded metadata can be manipulated by non-admins.
+            attribute_name = 'issue_25'
+            self.user.assert_icommand(['imeta', 'set', '-C', self.user.session_collection, attribute_name, 'v0'])
+            self.user.assert_icommand(['imeta', 'add', '-C', self.user.session_collection, attribute_name, 'v1'])
+            self.user.assert_icommand(['imeta', 'ls', '-C', self.user.session_collection], 'STDOUT', ['attribute: ' + attribute_name, 'value: v0', 'value: v1'])
+            self.user.assert_icommand(['imeta', 'rm', '-C', self.user.session_collection, attribute_name, 'v0'])
+            self.user.assert_icommand(['imeta', 'rm', '-C', self.user.session_collection, attribute_name, 'v1'])
+
+            # Show that the plugin does not allow non-admins to manipulate guarded metadata.
+            attribute_name = 'irods::issue_25'
+            self.user.assert_icommand(['imeta', 'set', '-C', self.user.session_collection, attribute_name, 'v'], 'STDERR', ['CAT_INSUFFICIENT_PRIVILEGE_LEVEL'])
+            self.user.assert_icommand(['imeta', 'add', '-C', self.user.session_collection, attribute_name, 'v'], 'STDERR', ['CAT_INSUFFICIENT_PRIVILEGE_LEVEL'])
+            self.user.assert_icommand(['imeta', 'rm', '-C', self.user.session_collection, attribute_name, 'v'], 'STDERR', ['CAT_INSUFFICIENT_PRIVILEGE_LEVEL'])
+            self.user.assert_icommand(['imeta', 'ls', '-C', self.user.session_collection], 'STDOUT', ['None'])
+
+        # Clean up.
+        self.rods.assert_icommand(['imeta', 'rm', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
 
     #
     # Utility Functions
