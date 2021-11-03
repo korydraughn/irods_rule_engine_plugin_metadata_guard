@@ -29,7 +29,6 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
     def tearDown(self):
         super(Test_Rule_Engine_Plugin_Metadata_Guard, self).tearDown()
 
-    @unittest.skipIf(test.settings.RUN_IN_TOPOLOGY, "Skip for Topology Testing")
     def test_incorrect_configuration_does_not_block_usage(self):
 	config = IrodsConfig()
 
@@ -57,7 +56,6 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
 
         self.assertTrue(count > 0)
 
-    @unittest.skipIf(test.settings.RUN_IN_TOPOLOGY, "Skip for Topology Testing")
     def test_authorized_users_via_editors_list_can_manipulate_metadata_in_guarded_namespace(self):
 	config = IrodsConfig()
 
@@ -90,7 +88,6 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
         # Clean up.
         self.rods.assert_icommand(['imeta', 'rm', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
 
-    @unittest.skipIf(test.settings.RUN_IN_TOPOLOGY, "Skip for Topology Testing")
     def test_unauthorized_users_cannot_manipulate_metadata_in_guarded_namespace(self):
 	config = IrodsConfig()
 
@@ -156,7 +153,6 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
 
         self.rods.assert_icommand(['iadmin', 'rfg', 'rodsadmin', self.admin.username])
 
-    @unittest.skipIf(test.settings.RUN_IN_TOPOLOGY, "Skip for Topology Testing")
     def test_plugin_does_not_throw_exception_when_json_config_has_not_been_set_as_metadata(self):
 	config = IrodsConfig()
 
