@@ -29,6 +29,8 @@ include(${IRODS_TARGETS_PATH})
 include(GNUInstallDirs)
 include(UseLibCXX)
 
+find_package(nlohmann_json "3.6.1" REQUIRED)
+
 if (NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build {Debug, Release}." FORCE)
     message(STATUS "Setting unspecified CMAKE_BUILD_TYPE to '${CMAKE_BUILD_TYPE}'")
@@ -58,11 +60,11 @@ target_compile_definitions(${PLUGIN} PRIVATE ${IRODS_COMPILE_DEFINITIONS}
 target_include_directories(${PLUGIN} PRIVATE ${IRODS_INCLUDE_DIRS}
                                              ${IRODS_EXTERNALS_FULLPATH_BOOST}/include
                                              ${IRODS_EXTERNALS_FULLPATH_SPDLOG}/include
-                                             ${IRODS_EXTERNALS_FULLPATH_FMT}/include
-                                             ${IRODS_EXTERNALS_FULLPATH_JSON}/include)
+                                             ${IRODS_EXTERNALS_FULLPATH_FMT}/include)
 
 target_link_libraries(${PLUGIN} PRIVATE irods_server
                                         irods_common
+                                        nlohmann_json::nlohmann_json
                                         ${IRODS_EXTERNALS_FULLPATH_BOOST}/lib/libboost_filesystem.so
                                         ${IRODS_EXTERNALS_FULLPATH_BOOST}/lib/libboost_system.so
                                         ${IRODS_EXTERNALS_FULLPATH_FMT}/lib/libfmt.so
