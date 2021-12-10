@@ -14,7 +14,7 @@
 #include <irods/scoped_privileged_client.hpp>
 
 #include <fmt/format.h>
-#include <json.hpp>
+#include <nlohmann/json.hpp>
 
 #include <boost/any.hpp>
 #include <boost/algorithm/string/predicate.hpp>
