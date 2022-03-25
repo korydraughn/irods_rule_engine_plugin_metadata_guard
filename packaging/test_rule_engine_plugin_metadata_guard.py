@@ -30,7 +30,7 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
         super(Test_Rule_Engine_Plugin_Metadata_Guard, self).tearDown()
 
     def test_incorrect_configuration_does_not_block_usage(self):
-	config = IrodsConfig()
+        config = IrodsConfig()
 
         # Set invalid JSON configuration for the root collection.
         root_coll = os.path.join('/', self.admin.zone_name)
@@ -57,7 +57,7 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
         self.assertTrue(count > 0)
 
     def test_authorized_users_via_editors_list_can_manipulate_metadata_in_guarded_namespace(self):
-	config = IrodsConfig()
+        config = IrodsConfig()
 
         # Set JSON configuration for the root collection.
         root_coll = os.path.join('/', self.admin.zone_name)
@@ -89,7 +89,7 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
         self.rods.assert_icommand(['imeta', 'rm', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
 
     def test_unauthorized_users_cannot_manipulate_metadata_in_guarded_namespace(self):
-	config = IrodsConfig()
+        config = IrodsConfig()
 
         root_coll = os.path.join('/', self.admin.zone_name)
         json_configs = [
@@ -154,7 +154,7 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
         self.rods.assert_icommand(['iadmin', 'rfg', 'rodsadmin', self.admin.username])
 
     def test_plugin_does_not_throw_exception_when_json_config_has_not_been_set_as_metadata(self):
-	config = IrodsConfig()
+        config = IrodsConfig()
 
         with lib.file_backed_up(config.server_config_path):
             self.enable_rule_engine_plugin(config)
@@ -168,7 +168,7 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
             self.assertEquals(lib.count_occurrences_of_string_in_log(paths.server_log_path(), 'SYS_CONFIG_FILE_ERR', log_offset), 0)
 
     def test_plugin_honors_admin_only_config_option_when_rodsadmins_manipulate_metadata__issue_25(self):
-	config = IrodsConfig()
+        config = IrodsConfig()
 
         # Set JSON configuration for the root collection.
         root_coll = os.path.join('/', self.admin.zone_name)
@@ -193,7 +193,7 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
         self.rods.assert_icommand(['imeta', 'rm', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
 
     def test_plugin_honors_admin_only_config_option_when_rodsusers_manipulate_metadata__issue_25(self):
-	config = IrodsConfig()
+        config = IrodsConfig()
 
         # Set JSON configuration for the root collection.
         root_coll = os.path.join('/', self.admin.zone_name)
