@@ -90,12 +90,13 @@ namespace
 
     auto rule_exists(irods::default_re_ctx&, const std::string& _rule_name, bool& _exists) -> irods::error
     {
-        _exists = (_rule_name == "pep_api_mod_avu_metadata_pre");
+        _exists = (_rule_name == "pep_api_mod_avu_metadata_pre" || _rule_name == "pep_api_atomic_apply_metadata_operations_pre");
         return SUCCESS();
     }
 
     auto list_rules(irods::default_re_ctx&, std::vector<std::string>& _rules) -> irods::error
     {
+        _rules.push_back("pep_api_atomic_apply_metadata_operations_pre");
         _rules.push_back("pep_api_mod_avu_metadata_pre");
         return SUCCESS();
     }
@@ -106,7 +107,6 @@ namespace
                    irods::callback _effect_handler) -> irods::error
     {
         try {
-            auto* input = boost::any_cast<modAVUMetadataInp_t*>(*std::next(std::begin(_rule_arguments), 2));
             auto& rei = get_rei(_effect_handler);
             const auto config = load_plugin_config(rei);
 
@@ -114,48 +114,62 @@ namespace
                 return CODE(RULE_ENGINE_CONTINUE);
             }
 
-            // JSON Configuration structure:
-            // {
-            //   "prefixes": ["irods::"],
-            //   "admin_only": true,
-            //   "editors": [
-            //     {"type": "group", "name": "rodsadmin"},
-            //     {"type": "user",  "name": "kory"},
-            //     {"type": "user",  "name": "jane#otherZone"}
-            //   ]
-            // }
-            for (auto&& prefix : config->at("prefixes")) {
-                // If the metadata attribute starts with the prefix, then verify that the user
-                // can modify the metadata attribute.
-                if (boost::starts_with(input->arg3, prefix.get_ref<const std::string&>())) {
-                    // The "admin_only" flag supersedes the "editors" configuration option.
-                    if (config->count("admin_only") && config->at("admin_only").get<bool>()) {
-                        return user_is_administrator(*rei.rsComm);
-                    }
+            if (_rule_name == "pep_api_atomic_apply_metadata_operations_pre") {
+                // TODO Iterate over the list of operations and verify if any of them reference
+                // AVUs within a protected namespace. Return an error if any of the AVUs is protected.
+                const auto* bbuf = boost::any_cast<BytesBuf*>(*std::next(std::begin(_rule_arguments), 2));
+                const auto json_input = json::parse(static_cast<const char*>(bbuf->buf), bbuf->len);
 
-                    namespace adm = irods::experimental::administration;
+                for (auto&& op : json_input.at("operations")) {
 
-                    const adm::user user{rei.uoic->userName, rei.uoic->rodsZone};
+                }
+            }
+            else { // pep_api_mod_avu_metadata_pre 
+                const auto* input = boost::any_cast<modAVUMetadataInp_t*>(*std::next(std::begin(_rule_arguments), 2));
 
-                    for (auto&& editor : config->at("editors")) {
-                        if (const auto& type = editor.at("type").get_ref<const std::string&>(); type == "group") {
-                            const adm::group group{editor.at("name").get_ref<const std::string&>()};
+                // JSON Configuration structure:
+                // {
+                //   "prefixes": ["irods::"],
+                //   "admin_only": true,
+                //   "editors": [
+                //     {"type": "group", "name": "rodsadmin"},
+                //     {"type": "user",  "name": "kory"},
+                //     {"type": "user",  "name": "jane#otherZone"}
+                //   ]
+                // }
+                for (auto&& prefix : config->at("prefixes")) {
+                    // If the metadata attribute starts with the prefix, then verify that the user
+                    // can modify the metadata attribute.
+                    if (boost::starts_with(input->arg3, prefix.get_ref<const std::string&>())) {
+                        // The "admin_only" flag supersedes the "editors" configuration option.
+                        if (config->count("admin_only") && config->at("admin_only").get<bool>()) {
+                            return user_is_administrator(*rei.rsComm);
+                        }
 
-                            if (adm::server::user_is_member_of_group(*rei.rsComm, group, user)) {
-                                return CODE(RULE_ENGINE_CONTINUE);
+                        namespace adm = irods::experimental::administration;
+
+                        const adm::user user{rei.uoic->userName, rei.uoic->rodsZone};
+
+                        for (auto&& editor : config->at("editors")) {
+                            if (const auto& type = editor.at("type").get_ref<const std::string&>(); type == "group") {
+                                const adm::group group{editor.at("name").get_ref<const std::string&>()};
+
+                                if (adm::server::user_is_member_of_group(*rei.rsComm, group, user)) {
+                                    return CODE(RULE_ENGINE_CONTINUE);
+                                }
+                            }
+                            else if (type == "user") {
+                                if (editor.at("name").get_ref<const std::string&>() == adm::server::local_unique_name(*rei.rsComm, user)) {
+                                    return CODE(RULE_ENGINE_CONTINUE);
+                                }
                             }
                         }
-                        else if (type == "user") {
-                            if (editor.at("name").get_ref<const std::string&>() == adm::server::local_unique_name(*rei.rsComm, user)) {
-                                return CODE(RULE_ENGINE_CONTINUE);
-                            }
-                        }
-                    }
 
-                    // At this point, the user is not an administrator and they aren't a member of
-                    // the editors list. Therefore, we return an error because the user is attempting to
-                    // modify metadata in a guarded namespace.
-                    return ERROR(CAT_INSUFFICIENT_PRIVILEGE_LEVEL, "User is not allowed to modify metadata");
+                        // At this point, the user is not an administrator and they aren't a member of
+                        // the editors list. Therefore, we return an error because the user is attempting to
+                        // modify metadata in a guarded namespace.
+                        return ERROR(CAT_INSUFFICIENT_PRIVILEGE_LEVEL, "User is not allowed to modify metadata");
+                    }
                 }
             }
         }
