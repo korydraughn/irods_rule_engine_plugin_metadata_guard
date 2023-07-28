@@ -27,8 +27,8 @@
 namespace
 {
     // clang-format off
-    using log  = irods::experimental::log;
-    using json = nlohmann::json;
+    using log_re = irods::experimental::log::rule_engine;
+    using json   = nlohmann::json;
     // clang-format on
 
     auto get_rei(irods::callback& _effect_handler) -> ruleExecInfo_t&
@@ -59,7 +59,7 @@ namespace
             }
             catch (const json::exception&) {
                 const char* msg = "Cannot parse Rule Engine Plugin configuration";
-                log::rule_engine::error({{"log_message", fmt::format("{}.", msg)}, {"rule_engine_plugin", "metadata_guard"}});
+                log_re::error({{"log_message", fmt::format("{}.", msg)}, {"rule_engine_plugin", "metadata_guard"}});
                 THROW(SYS_CONFIG_FILE_ERR, msg);
             }
         }
@@ -74,8 +74,8 @@ namespace
         }
 
         // clang-format off
-        log::rule_engine::error({{"log_message", "User is not allowed to modify metadata."},
-                                 {"rule_engine_plugin", "metadata_guard"}});
+        log_re::error({{"log_message", "User is not allowed to modify metadata."},
+                       {"rule_engine_plugin", "metadata_guard"}});
         // clang-format on
 
         return ERROR(CAT_INSUFFICIENT_PRIVILEGE_LEVEL, "User must be an admininstrator to modify metadata");
@@ -161,12 +161,12 @@ namespace
         }
         catch (const json::exception&) {
             // clang-format off
-            log::rule_engine::error({{"log_message", "Unexpected JSON access or type error."},
-                                     {"rule_engine_plugin", "metadata_guard"}});
+            log_re::error({{"log_message", "Unexpected JSON access or type error."},
+                           {"rule_engine_plugin", "metadata_guard"}});
             // clang-format on
         }
         catch (const std::exception& e) {
-            log::rule_engine::error({{"log_message", e.what()}, {"rule_engine_plugin", "metadata_guard"}});
+            log_re::error({{"log_message", e.what()}, {"rule_engine_plugin", "metadata_guard"}});
         }
 
         return CODE(RULE_ENGINE_CONTINUE);
