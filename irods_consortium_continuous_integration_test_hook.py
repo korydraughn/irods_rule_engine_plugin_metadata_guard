@@ -28,12 +28,17 @@ def main():
             )
         )
 
+        irods_python_ci_utilities.subprocess_get_output(['python3', '-m',  'pip',  'install', 'python-irodsclient==1.1.9'], check_rc=True)
+
     test = options.test or 'test_rule_engine_plugin_metadata_guard'
 
     try:
         test_output_file = 'log/test_output.log'
         irods_python_ci_utilities.subprocess_get_output(['sudo', 'su', '-', 'irods', '-c',
             f'python3 scripts/run_tests.py --xml_output --run_s {test} 2>&1 | tee {test_output_file}; exit $PIPESTATUS'],
+            check_rc=True)
+        irods_python_ci_utilities.subprocess_get_output(['sudo', 'su', '-', 'irods', '-c',
+            f'python3 scripts/irods_prc_tests/test_rule_engine_plugin_metadata_guard_atomic.py 2>&1 | tee {test_output_file}; exit $PIPESTATUS'],
             check_rc=True)
     finally:
         output_root_directory = options.output_root_directory

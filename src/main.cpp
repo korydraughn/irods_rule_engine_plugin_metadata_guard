@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <array>
 #include <optional>
+#include <unordered_map>
 
 namespace
 {
@@ -90,87 +91,223 @@ namespace
 
     auto rule_exists(irods::default_re_ctx&, const std::string& _rule_name, bool& _exists) -> irods::error
     {
-        _exists = (_rule_name == "pep_api_mod_avu_metadata_pre");
-        return SUCCESS();
-    }
+		_exists = (_rule_name == "pep_api_mod_avu_metadata_pre") ||
+		          (_rule_name == "pep_api_atomic_apply_metadata_operations_pre");
+		return SUCCESS();
+	}
 
-    auto list_rules(irods::default_re_ctx&, std::vector<std::string>& _rules) -> irods::error
-    {
-        _rules.push_back("pep_api_mod_avu_metadata_pre");
-        return SUCCESS();
-    }
+	auto list_rules(irods::default_re_ctx&, std::vector<std::string>& _rules) -> irods::error
+	{
+		_rules.push_back("pep_api_mod_avu_metadata_pre");
+		_rules.push_back("pep_api_atomic_apply_metadata_operations_pre");
+		return SUCCESS();
+	}
 
-    auto exec_rule(irods::default_re_ctx&,
-                   const std::string& _rule_name,
-                   std::list<boost::any>& _rule_arguments,
-                   irods::callback _effect_handler) -> irods::error
-    {
-        try {
-            auto* input = boost::any_cast<modAVUMetadataInp_t*>(*std::next(std::begin(_rule_arguments), 2));
-            auto& rei = get_rei(_effect_handler);
-            const auto config = load_plugin_config(rei);
+	auto check_operation_for_violations(const std::string& _attribute,
+	                                    ruleExecInfo_t& rei,
+	                                    const json& config,
+	                                    const json& prefixes,
+	                                    const bool admin_only) -> irods::error
+	{
+		const auto prefix_matched = std::any_of(prefixes.cbegin(), prefixes.cend(), [&_attribute](const json& prefix) {
+			return boost::starts_with(_attribute, prefix.get_ref<const std::string&>());
+		});
+		if (!prefix_matched) {
+			return CODE(RULE_ENGINE_CONTINUE);
+		}
 
-            if (!config) {
-                return CODE(RULE_ENGINE_CONTINUE);
-            }
+		// If admin_only, success was already checked outside this call
+		// Therefore, always fail.
+		if (admin_only) {
+			return ERROR(CAT_INSUFFICIENT_PRIVILEGE_LEVEL, "User must be an admininstrator to modify metadata");
+		}
 
-            // JSON Configuration structure:
-            // {
-            //   "prefixes": ["irods::"],
-            //   "admin_only": true,
-            //   "editors": [
-            //     {"type": "group", "name": "rodsadmin"},
-            //     {"type": "user",  "name": "kory"},
-            //     {"type": "user",  "name": "jane#otherZone"}
-            //   ]
-            // }
-            for (auto&& prefix : config->at("prefixes")) {
-                // If the metadata attribute starts with the prefix, then verify that the user
-                // can modify the metadata attribute.
-                if (boost::starts_with(input->arg3, prefix.get_ref<const std::string&>())) {
-                    // The "admin_only" flag supersedes the "editors" configuration option.
-                    if (config->count("admin_only") && config->at("admin_only").get<bool>()) {
-                        return user_is_administrator(*rei.rsComm);
-                    }
+		namespace adm = irods::experimental::administration;
+		const adm::user user{rei.uoic->userName, rei.uoic->rodsZone};
+		const auto& editors = config.at("editors");
+		const auto editor_matched = std::any_of(editors.cbegin(), editors.cend(), [&rei, &user](const json& editor) {
+			const auto& type = editor.at("type").get_ref<const std::string&>();
+			const auto& name{editor.at("name").get_ref<const std::string&>()};
+			if (type == "user") {
+				return adm::server::local_unique_name(*rei.rsComm, user) == name;
+			}
+			if (type == "group") {
+				const adm::group group{name};
+				return adm::server::user_is_member_of_group(*rei.rsComm, group, user);
+			}
+			return false;
+		});
+		if (editor_matched) {
+			return CODE(RULE_ENGINE_CONTINUE);
+		}
 
-                    namespace adm = irods::experimental::administration;
+		return ERROR(CAT_INSUFFICIENT_PRIVILEGE_LEVEL, "User must be an authorized editor to modify metadata.");
+	}
 
-                    const adm::user user{rei.uoic->userName, rei.uoic->rodsZone};
+	auto handle_pep_api_mod_avu_metadata_pre(std::list<boost::any>& _rule_arguments, irods::callback _effect_handler)
+		-> irods::error
+	{
+		try {
+			auto* input = boost::any_cast<modAVUMetadataInp_t*>(*std::next(std::begin(_rule_arguments), 2));
+			auto& rei = get_rei(_effect_handler);
+			const auto config = load_plugin_config(rei);
 
-                    for (auto&& editor : config->at("editors")) {
-                        if (const auto& type = editor.at("type").get_ref<const std::string&>(); type == "group") {
-                            const adm::group group{editor.at("name").get_ref<const std::string&>()};
+			if (!config) {
+				return CODE(RULE_ENGINE_CONTINUE);
+			}
 
-                            if (adm::server::user_is_member_of_group(*rei.rsComm, group, user)) {
-                                return CODE(RULE_ENGINE_CONTINUE);
-                            }
-                        }
-                        else if (type == "user") {
-                            if (editor.at("name").get_ref<const std::string&>() == adm::server::local_unique_name(*rei.rsComm, user)) {
-                                return CODE(RULE_ENGINE_CONTINUE);
-                            }
-                        }
-                    }
+			// JSON Configuration structure:
+			// {
+			//   "prefixes": ["irods::"],
+			//   "admin_only": true,
+			//   "editors": [
+			//     {"type": "group", "name": "rodsadmin"},
+			//     {"type": "user",  "name": "kory"},
+			//     {"type": "user",  "name": "jane#otherZone"}
+			//   ]
+			// }
+			for (auto&& prefix : config->at("prefixes")) {
+				// If the metadata attribute starts with the prefix, then verify that the user
+				// can modify the metadata attribute.
+				if (boost::starts_with(input->arg3, prefix.get_ref<const std::string&>())) {
+					// The "admin_only" flag supersedes the "editors" configuration option.
+					const auto& admin_iter = config->find("admin_only");
+					if (admin_iter != config->cend() && admin_iter->get<bool>()) {
+						return user_is_administrator(*rei.rsComm);
+					}
 
-                    // At this point, the user is not an administrator and they aren't a member of
-                    // the editors list. Therefore, we return an error because the user is attempting to
-                    // modify metadata in a guarded namespace.
-                    return ERROR(CAT_INSUFFICIENT_PRIVILEGE_LEVEL, "User is not allowed to modify metadata");
-                }
-            }
-        }
-        catch (const json::exception&) {
-            // clang-format off
+					namespace adm = irods::experimental::administration;
+
+					const adm::user user{rei.uoic->userName, rei.uoic->rodsZone};
+
+					for (auto&& editor : config->at("editors")) {
+						if (const auto& type = editor.at("type").get_ref<const std::string&>(); type == "group") {
+							const adm::group group{editor.at("name").get_ref<const std::string&>()};
+
+							if (adm::server::user_is_member_of_group(*rei.rsComm, group, user)) {
+								return CODE(RULE_ENGINE_CONTINUE);
+							}
+						}
+						else if (type == "user") {
+							if (editor.at("name").get_ref<const std::string&>() ==
+							    adm::server::local_unique_name(*rei.rsComm, user)) {
+								return CODE(RULE_ENGINE_CONTINUE);
+							}
+						}
+					}
+
+					// At this point, the user is not an administrator and they aren't a member of
+					// the editors list. Therefore, we return an error because the user is attempting to
+					// modify metadata in a guarded namespace.
+					return ERROR(CAT_INSUFFICIENT_PRIVILEGE_LEVEL, "User is not allowed to modify metadata");
+				}
+			}
+		}
+		catch (const json::exception&) {
+			// clang-format off
             log_re::error({{"log_message", "Unexpected JSON access or type error."},
                            {"rule_engine_plugin", "metadata_guard"}});
             // clang-format on
-        }
-        catch (const std::exception& e) {
-            log_re::error({{"log_message", e.what()}, {"rule_engine_plugin", "metadata_guard"}});
-        }
+		}
+		catch (const std::exception& e) {
+			log_re::error({{"log_message", e.what()}, {"rule_engine_plugin", "metadata_guard"}});
+		}
 
-        return CODE(RULE_ENGINE_CONTINUE);
-    }
+		return CODE(RULE_ENGINE_CONTINUE);
+	}
+
+	auto handle_pep_api_atomic_apply_metadata_operations_pre(std::list<boost::any>& _rule_arguments,
+	                                                         irods::callback _effect_handler) -> irods::error
+	{
+		auto is_input_valid = [](const bytesBuf_t* _input) -> std::tuple<bool, std::string> {
+			if (!_input) {
+				return {false, "Missing JSON input"};
+			}
+
+			if (_input->len <= 0) {
+				return {false, "Length of buffer must be greater than zero"};
+			}
+
+			if (!_input->buf) {
+				return {false, "Missing input buffer"};
+			}
+
+			return {true, ""};
+		};
+
+		try {
+			auto* input_bb = boost::any_cast<bytesBuf_t*>(*std::next(std::begin(_rule_arguments), 2));
+
+			if (const auto [valid, msg] = is_input_valid(input_bb); !valid) {
+				log_re::error(msg);
+				return ERROR(INPUT_ARG_NOT_WELL_FORMED_ERR, msg);
+			}
+
+			const auto input_bb_casted = static_cast<const char*>(input_bb->buf);
+			json input = json::parse(input_bb_casted, input_bb_casted + input_bb->len);
+			const auto& operations = input.at("operations");
+
+			auto& rei = get_rei(_effect_handler);
+			const auto config = load_plugin_config(rei);
+			if (config == std::nullopt) {
+				return CODE(RULE_ENGINE_CONTINUE);
+			}
+			const auto prefixes_iter = config->find("prefixes");
+			if (prefixes_iter == config->cend()) {
+				log_re::error({{"log_message", "Required property \"prefixes\": [\"...\"] not found"},
+				               {"rule_engine_plugin", "metadata_guard"}});
+				return CODE(RULE_ENGINE_CONTINUE);
+			}
+
+			const auto admin_iter = config->find("admin_only");
+			const bool admin_check = admin_iter != config->cend() && admin_iter->get<bool>();
+
+			if (admin_check && user_is_administrator(*rei.rsComm).ok()) {
+				return CODE(RULE_ENGINE_CONTINUE);
+			}
+
+			for (auto&& op : operations) {
+				const auto err_code = check_operation_for_violations(
+					op.at("attribute").get_ref<const std::string&>(), rei, *config, *prefixes_iter, admin_check);
+				if (!err_code.ok()) {
+					log_re::error({{"log_message", err_code.result()}, {"rule_engine_plugin", "metadata_guard"}});
+					return err_code;
+				}
+			}
+
+			return CODE(RULE_ENGINE_CONTINUE);
+		}
+		catch (const json::exception& e) {
+			log_re::error({{"log_message", "Failed to parse input into JSON"},
+			               {"error_message", e.what()},
+			               {"rule_engine_plugin", "metadata_guard"}});
+		}
+		catch (const std::exception& e) {
+			log_re::error({{"log_message", e.what()}, {"rule_engine_plugin", "metadata_guard"}});
+		}
+
+		return CODE(RULE_ENGINE_CONTINUE);
+	}
+
+	auto exec_rule(irods::default_re_ctx&,
+	               const std::string& _rule_name,
+	               std::list<boost::any>& _rule_arguments,
+	               irods::callback _effect_handler) -> irods::error
+	{
+		static const std::unordered_map<std::string,
+		                                std::function<irods::error(std::list<boost::any>&, irods::callback)>>
+			lookup_table{
+				{"pep_api_mod_avu_metadata_pre", handle_pep_api_mod_avu_metadata_pre},
+				{"pep_api_atomic_apply_metadata_operations_pre", handle_pep_api_atomic_apply_metadata_operations_pre}};
+
+		static const auto rule_iterator = lookup_table.find(_rule_name);
+
+		if (rule_iterator != lookup_table.end()) {
+			return std::get<1>(*rule_iterator)(_rule_arguments, _effect_handler);
+		}
+
+		return CODE(RULE_ENGINE_CONTINUE);
+	}
 } // namespace (anonymous)
 
 //
