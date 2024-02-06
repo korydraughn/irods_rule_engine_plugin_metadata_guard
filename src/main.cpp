@@ -149,6 +149,13 @@ namespace
 	{
 		try {
 			auto* input = boost::any_cast<modAVUMetadataInp_t*>(*std::next(std::begin(_rule_arguments), 2));
+
+			if (strcmp(input->arg0, "rmw") == 0) {
+				log_re::error({{"log_message", "rmw is deprecated and its usage is disallowed by metadata_guard"},
+				               {"rule_engine_plugin", "metadata_guard"}});
+				return ERROR(SYS_NOT_ALLOWED, "rmw is deprecated and its usage is disallowed by metadata_guard");
+			}
+
 			auto& rei = get_rei(_effect_handler);
 			const auto config = load_plugin_config(rei);
 

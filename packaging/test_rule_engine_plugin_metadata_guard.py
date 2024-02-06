@@ -223,6 +223,49 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
         # Clean up.
         self.rods.assert_icommand(['imeta', 'rm', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
 
+    def test_plugin_disallows_rmw__issue_40(self):
+        config = IrodsConfig()
+
+        # Set JSON configuration for the root collection.
+        root_coll = os.path.join('/', self.admin.zone_name)
+        json_config = json.dumps({
+            'prefixes': ['irods::'],
+            'admin_only': True
+        })
+        self.rods.assert_icommand(['imeta', 'set', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
+
+        try:
+            with lib.file_backed_up(config.server_config_path):
+                self.enable_rule_engine_plugin(config)
+
+                # neither user should be able to use rmw
+                self.user.assert_icommand(['imeta', 'rmw', '-C', self.user.session_collection, '%', '%'], 'STDERR', ['SYS_NOT_ALLOWED'])
+                self.rods.assert_icommand(['imeta', 'rmw', '-C', self.rods.session_collection, '%', '%'], 'STDERR', ['SYS_NOT_ALLOWED'])
+        finally:
+            # Clean up.
+            self.rods.assert_icommand(['imeta', 'rm', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
+
+        json_config = json.dumps({
+            'prefixes': ['irods::'],
+            'admin_only': False,
+            'editors': [
+                {'type': 'user', 'name': self.rods.username },
+                {'type': 'user', 'name': self.user.username }
+            ]
+        })
+        self.rods.assert_icommand(['imeta', 'set', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
+
+        try:
+            with lib.file_backed_up(config.server_config_path):
+                self.enable_rule_engine_plugin(config)
+
+                # neither user should be able to use rmw, even as editors
+                self.user.assert_icommand(['imeta', 'rmw', '-C', self.user.session_collection, '%', '%'], 'STDERR', ['SYS_NOT_ALLOWED'])
+                self.rods.assert_icommand(['imeta', 'rmw', '-C', self.rods.session_collection, '%', '%'], 'STDERR', ['SYS_NOT_ALLOWED'])
+        finally:
+            # Clean up.
+            self.rods.assert_icommand(['imeta', 'rm', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
+
     #
     # Utility Functions
     #
