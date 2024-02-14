@@ -22,7 +22,6 @@ project(irods_rule_engine_plugin-metadata_guard
 include(${IRODS_TARGETS_PATH})
 
 include(GNUInstallDirs)
-include(UseLibCXX)
 
 find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED COMPONENTS Crypto SSL)
