@@ -173,10 +173,25 @@ namespace
 			//     {"type": "user",  "name": "jane#otherZone"}
 			//   ]
 			// }
+
+			// Per the API, any of arg5 to arg8 is eligible to be the new attribute
+			// (depending on which one starts with "n:")
+			// However, only one will be considered (multiples will throw CAT_INVALID_ARGUMENT)
+			// Therefore, find the first one that starts with "n:"
+			const auto candidates = {input->arg5, input->arg6, input->arg7, input->arg8};
+			const auto mod_attr_ptr = std::find_if(std::begin(candidates), std::end(candidates), [](char* arg) {
+				return arg && boost::starts_with(arg, "n:");
+			});
+			const char* mod_attr_name = nullptr;
+			if (mod_attr_ptr != std::end(candidates)) {
+				mod_attr_name = (*mod_attr_ptr) + 2;
+			}
 			for (auto&& prefix : config->at("prefixes")) {
 				// If the metadata attribute starts with the prefix, then verify that the user
 				// can modify the metadata attribute.
-				if (boost::starts_with(input->arg3, prefix.get_ref<const std::string&>())) {
+				if (boost::starts_with(input->arg3, prefix.get_ref<const std::string&>()) ||
+				    (mod_attr_name && boost::starts_with(mod_attr_name, prefix.get_ref<const std::string&>())))
+				{
 					// The "admin_only" flag supersedes the "editors" configuration option.
 					const auto& admin_iter = config->find("admin_only");
 					if (admin_iter != config->cend() && admin_iter->get<bool>()) {
