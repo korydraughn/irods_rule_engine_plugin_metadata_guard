@@ -26,6 +26,8 @@ include(UseLibCXX)
 find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED COMPONENTS Crypto SSL)
 find_package(nlohmann_json "3.6.1" REQUIRED)
+find_package(fmt "8.1.1"
+  HINTS "${IRODS_EXTERNALS_FULLPATH_FMT}")
 
 if (NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build {Debug, Release}." FORCE)
@@ -56,15 +58,14 @@ target_compile_definitions(${PLUGIN} PRIVATE ${IRODS_COMPILE_DEFINITIONS}
 
 target_include_directories(${PLUGIN} PRIVATE ${IRODS_INCLUDE_DIRS}
                                              ${IRODS_EXTERNALS_FULLPATH_BOOST}/include
-                                             ${IRODS_EXTERNALS_FULLPATH_SPDLOG}/include
-                                             ${IRODS_EXTERNALS_FULLPATH_FMT}/include)
+                                             ${IRODS_EXTERNALS_FULLPATH_SPDLOG}/include)
 
 target_link_libraries(${PLUGIN} PRIVATE irods_server
                                         irods_common
                                         nlohmann_json::nlohmann_json
+                                        fmt::fmt
                                         ${IRODS_EXTERNALS_FULLPATH_BOOST}/lib/libboost_filesystem.so
                                         ${IRODS_EXTERNALS_FULLPATH_BOOST}/lib/libboost_system.so
-                                        ${IRODS_EXTERNALS_FULLPATH_FMT}/lib/libfmt.so
                                         ${CMAKE_DL_LIBS})
 
 install(TARGETS ${PLUGIN} LIBRARY DESTINATION ${IRODS_PLUGINS_DIRECTORY}/rule_engines)
