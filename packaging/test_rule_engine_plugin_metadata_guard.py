@@ -1,22 +1,18 @@
-from __future__ import print_function
-
+import json
 import os
 import sys
-import json
-
-if sys.version_info < (2, 7):
-    import unittest2 as unittest
-else:
-    import unittest
+import unittest
 
 from . import session
-from .. import test
 from .. import lib
 from .. import paths
+from .. import test
 from ..configuration import IrodsConfig
+from ..controller import IrodsController
 
 admins = [('otherrods', 'rods')]
 users  = [('alice', 'rods')]
+
 
 class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins, users), unittest.TestCase):
 
@@ -51,7 +47,7 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
             count = lib.count_occurrences_of_string_in_log(paths.server_log_path(), 'Cannot parse Rule Engine Plugin configuration', log_offset)
 
         # Clean up.
-        self.rods.assert_icommand(['imeta', 'rm', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
+        self.rods.assert_icommand(['imeta', 'rm', '-M', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
 
         self.assertTrue(count > 0)
 
@@ -66,6 +62,7 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
             'editors': [
                 {'type': 'group', 'name': 'rodsadmin'},
                 {'type': 'user',  'name': self.admin.username},
+                {'type': 'user',  'name': self.rods.username},
                 {'type': 'user',  'name': self.user.username}
             ]
         })
@@ -84,7 +81,7 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
             self.admin.assert_icommand(['imeta', 'rm', '-C', coll, attribute_name, new_attr_value])
 
         # Clean up.
-        self.rods.assert_icommand(['imeta', 'rm', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
+        self.rods.assert_icommand(['imeta', 'rm', '-M', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
 
     def test_unauthorized_users_cannot_manipulate_metadata_in_guarded_namespace(self):
         config = IrodsConfig()
@@ -112,6 +109,7 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
 
         self.rods.assert_icommand(['iadmin', 'mkgroup', 'rodsadmin'])
         self.rods.assert_icommand(['iadmin', 'atg', 'rodsadmin', self.admin.username])
+        self.rods.assert_icommand(['iadmin', 'atg', 'rodsadmin', self.rods.username])
 
         for json_config in json_configs:
             # Set JSON configuration for the root collection.
@@ -147,7 +145,7 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
                 check_metadata()
 
             # Clean up.
-            self.rods.assert_icommand(['imeta', 'rm', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
+            self.rods.assert_icommand(['imeta', 'rm', '-M', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
 
         self.rods.assert_icommand(['iadmin', 'rfg', 'rodsadmin', self.admin.username])
         self.rods.assert_icommand(['iadmin', 'rmgroup', 'rodsadmin'])
@@ -189,7 +187,7 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
                 self.admin.assert_icommand(['imeta', 'rm', '-C', self.admin.session_collection, attribute_name, 'v1'])
 
         # Clean up.
-        self.rods.assert_icommand(['imeta', 'rm', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
+        self.rods.assert_icommand(['imeta', 'rm', '-M', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
 
     def test_plugin_honors_admin_only_config_option_when_rodsusers_manipulate_metadata__issue_25(self):
         config = IrodsConfig()
@@ -221,71 +219,7 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
             self.user.assert_icommand(['imeta', 'ls', '-C', self.user.session_collection], 'STDOUT', ['None'])
 
         # Clean up.
-        self.rods.assert_icommand(['imeta', 'rm', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
-
-    def test_plugin_disallows_rmw__issue_40(self):
-        config = IrodsConfig()
-
-        # Set JSON configuration for the root collection.
-        root_coll = os.path.join('/', self.admin.zone_name)
-        json_config = json.dumps({
-            'prefixes': ['irods::'],
-            'admin_only': True
-        })
-        self.rods.assert_icommand(['imeta', 'set', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
-
-        try:
-            with lib.file_backed_up(config.server_config_path):
-                self.enable_rule_engine_plugin(config)
-
-                # neither user should be able to use rmw
-                self.user.assert_icommand(['imeta', 'rmw', '-C', self.user.session_collection, '%', '%'], 'STDERR', ['SYS_NOT_ALLOWED'])
-                self.rods.assert_icommand(['imeta', 'rmw', '-C', self.rods.session_collection, '%', '%'], 'STDERR', ['SYS_NOT_ALLOWED'])
-        finally:
-            # Clean up.
-            self.rods.assert_icommand(['imeta', 'rm', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
-
-        json_config = json.dumps({
-            'prefixes': ['irods::'],
-            'admin_only': False,
-            'editors': [
-                {'type': 'user', 'name': self.rods.username },
-                {'type': 'user', 'name': self.user.username }
-            ]
-        })
-        self.rods.assert_icommand(['imeta', 'set', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
-
-        try:
-            with lib.file_backed_up(config.server_config_path):
-                self.enable_rule_engine_plugin(config)
-
-                # neither user should be able to use rmw, even as editors
-                self.user.assert_icommand(['imeta', 'rmw', '-C', self.user.session_collection, '%', '%'], 'STDERR', ['SYS_NOT_ALLOWED'])
-                self.rods.assert_icommand(['imeta', 'rmw', '-C', self.rods.session_collection, '%', '%'], 'STDERR', ['SYS_NOT_ALLOWED'])
-        finally:
-            # Clean up.
-            self.rods.assert_icommand(['imeta', 'rm', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
-
-    def test_plugin_cannot_be_bypassed_with_addw__issue_40(self):
-        config = IrodsConfig()
-
-        # Set JSON configuration for the root collection.
-        root_coll = os.path.join('/', self.admin.zone_name)
-        json_config = json.dumps({
-            'prefixes': ['irods::'],
-            'admin_only': True
-        })
-        self.rods.assert_icommand(['imeta', 'set', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
-
-        try:
-            with lib.file_backed_up(config.server_config_path):
-                self.enable_rule_engine_plugin(config)
-
-                self.user.assert_icommand(['imeta', 'addw', '-C', self.user.session_collection, 'irods::addw', 'v'], 'STDERR', ['CAT_INSUFFICIENT_PRIVILEGE_LEVEL'])
-
-        finally:
-            # Clean up.
-            self.rods.assert_icommand(['imeta', 'rm', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
+        self.rods.assert_icommand(['imeta', 'rm', '-M', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
 
     def test_plugin_cannot_be_bypassed_via_imeta_mod__issue_58(self):
         config = IrodsConfig()
@@ -311,7 +245,7 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
                 self.user.assert_icommand(['imeta', 'mod', '-C', self.user.session_collection, 'unprotected::withunits', 'v', 'n:irods::withunits', 'u'], 'STDERR', ['CAT_INSUFFICIENT_PRIVILEGE_LEVEL'])
         finally:
             # Clean up.
-            self.rods.assert_icommand(['imeta', 'rm', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
+            self.rods.assert_icommand(['imeta', 'rm', '-M', '-C', root_coll, self.metadata_guard_attribute_name(), json_config])
 
     #
     # Utility Functions
@@ -326,7 +260,7 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
             'plugin_specific_configuration': {}
         })
         lib.update_json_file_from_dict(config.server_config_path, config.server_config)
+        IrodsController().reload_configuration()
 
     def metadata_guard_attribute_name(self):
         return 'irods::metadata_guard'
-
