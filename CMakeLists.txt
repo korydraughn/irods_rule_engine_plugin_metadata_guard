@@ -50,8 +50,7 @@ include(GNUInstallDirs)
 find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED COMPONENTS Crypto SSL)
 find_package(nlohmann_json "3.6.1" REQUIRED)
-find_package(fmt "8.1.1"
-  HINTS "${IRODS_EXTERNALS_FULLPATH_FMT}")
+find_package(fmt "8.1.1" REQUIRED)
 
 if (NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build {Debug, Release}." FORCE)
