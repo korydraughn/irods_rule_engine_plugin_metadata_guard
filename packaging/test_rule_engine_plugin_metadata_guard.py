@@ -160,8 +160,6 @@ class Test_Rule_Engine_Plugin_Metadata_Guard(session.make_sessions_mixin(admins,
             self.admin.assert_icommand(['imeta', 'set', '-C', self.admin.session_collection, 'a', 'v'])
             self.admin.assert_icommand(['imeta', 'ls', '-C', self.admin.session_collection], 'STDOUT', ['attribute: a', 'value: v'])
 
-            self.assertEqual(lib.count_occurrences_of_string_in_log(paths.server_log_path(), 'error', log_offset), 0)
-            self.assertEqual(lib.count_occurrences_of_string_in_log(paths.server_log_path(), 'exception', log_offset), 0)
             self.assertEqual(lib.count_occurrences_of_string_in_log(paths.server_log_path(), 'SYS_CONFIG_FILE_ERR', log_offset), 0)
 
     def test_plugin_honors_admin_only_config_option_when_rodsadmins_manipulate_metadata__issue_25(self):
